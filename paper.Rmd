@@ -1,0 +1,638 @@
+---
+title: "富山県における京都系土師器皿の受容と展開"
+subtitle: "統計解析言語Rを利用した考古学的研究"
+author: "松井　広信"
+date: "最終修正: `r Sys.Date()`"
+output: 
+    bookdown::word_document2:
+      number_sections: false
+      fig_caption: yes
+      reference_docx: "./analysis/templates/template.docx"
+editor_options: 
+  markdown: 
+    wrap: 72
+bibliography: "./analysis/templates/mylib.bib"
+csl: "./analysis/templates/sist02-japanese_変更.csl"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  echo = FALSE,
+  comment = "#>",
+  dpi = 300,
+  fig.path = ".analysis/figures/"
+)
+
+image_width_1_col_inch = 90/25.4 # image Single column	w = 90 mm 
+image_width_2_col_inch = 190/25.4 # image Double column w = 190 mm 
+
+library(tidyverse)
+library(Momocs)
+library(patchwork)
+library(here)
+```
+
+# はじめに
+
+本稿は令和2年11月8日（日）に越中史壇会研究発表会で発表した「R言語を利用した京都系土師器皿の研究」[@matsui_2021]の内容をベースに大幅に加筆して論文としたものである。本研究では、幾何学的形態測定学の楕円フーリエ解析を用いて、土師器皿の断面の形を比較する。併せて、先行研究でも注目されてきた土師器皿の口径について、統計学的分析を行う。それにより、京都産土師器皿の影響がいつ、どのように富山へと伝播したのか、どのように変遷していったのかを明らかにする。富山において京都系土師器皿の成立・変化の方向性を研究することは、城館や城下町の遺跡の年代を決定するうえで重要であることに加え、史資料の空白が多い越中の戦国史に、考古学の観点から当時の社会情勢の一端を明らかにできることが期待される。
+
+# 研究方法
+
+## 対象と背景
+
+これまでの富山県における中世土師器皿の研究は、 宮田[-@miyata_1984; ,-@miyata_1995; ,-@miyata_1997]や @uno_1986 の研究を先駆けに、@echizen_1996、森[-@mori_2003; ,-@mori_2005]、@takanashi_2006、@echizen_takanashi_2007、@horiuchi_2019、松井[-@matsui_2019; ,-@matsui_2021] によって行われている。約40年にわたる研究で、対象とする範囲（遺跡や時代等）や、研究手法による違いから、富山県の中世土師器皿の分類は研究者によって様々である。本稿ではその中でも、富山県内の一括性の高い資料を扱って中世全体の土師器皿の分類を示した @echizen_takanashi_2007 の分類を基本としたい（Figure
+\@ref(fig:Types-of-earthenware-plates)）。内面調整がこの分類と対応しており[@matsui_2019]、富山の中世後期の土師器皿の分類としては最も妥当である。
+
+京都**系**土師器皿は15世紀後半に京都**産**土師器皿を模倣して作られた素焼の皿である。京都系土師器皿は、模倣する要素や度合いが地域によって異なることから[@nakai_2006]、全国で統一した定義はない。富山県においても明確に示したものはなく、研究者によって異なっている。隣の石川県では、「手捏ねで、京都の土師器の形態・調整を模倣したもの」を京都系土師器皿とし、具体的には下記の4点が挙げられている[@iwase_2019]。①体部は緩やかに開き、口縁端部をつまみ上げる、または端部内面にヨコナデによる面を形成する。外面は口縁部付近飲みをヨコナデする。②内面調整の結果、内底面に凸圏線や凹線が観察される個体がある。内面調整は小型品に「の」字状ナデ、中型品以上に「2」字状ナデを施すものがある。③小・中・大・特大の法量がみられる。小皿にはヘソ皿を含む。④模倣が形骸化したものがみられる。
+
+このうち内面調整の「の」字状ナデと「2」字状ナデは、15世紀中頃以降の京都産土師器皿に見られる特徴である[@nakai_2006]。富山では、この特徴が越前・高梨分類のTIにあることから、本稿ではこれを京都系土師器皿として扱う。TIは富山県内で広く使われ、石名田木舟遺跡（小矢部市）や富山城跡（富山市）など城館遺跡でまとまって出土している[^1]。15世紀後半から増加し、16世紀後半まで残るとされる[@takanashi_2006]。その影響を受けたと思われる型式もあり(Figure
+\@ref(fig:Types-of-earthenware-plates) TJ・RH)、これらも広い意味では京都系土師器皿といえるが、本稿では在地の土師器皿とみなし対象から除外する。
+
+[^1]: @horiuchi_2019 は富山城跡出土土師器皿のうち、小型品（A類）を在地系、中大型品（C類）を京都系に分類している。A類に「の」字状ナデ、C類に「2」字状ナデが見られることから、本稿ではどちらもTIとする。
+
+京都系土師器皿の富山への伝播については、宇野が弓庄城跡と京都の資料から、その影響を述べている[@uno_1986]。それによると、弓庄城跡の土師器皿は、「古く位置づけるならば（16世紀第一四半期）、器形には京都の影響を受けたが法量の点ではあまり影響を受けなかったといえ」、「新しく位置づけるならば（16世紀中頃）、器形が古い形態を保持している」とし、第2群土器（京都系土師器皿）について、16世紀初頭前後に京都からの影響を受けて成立したと考察している[^2]。このほかに京都系土師器皿の伝播を具体的に検討した事例はないが、どの研究でも概ね15世紀後半に京都系土師器皿が増加するとされている[@miyata_1995]。
+
+本研究で分析した土師器皿は、富山と京都から出土したものである。ここでは京都系土師器皿が地方に広がる15世紀中ごろから16世紀前半にかけての資料に焦点を当て、年代観が比較的確立されている資料を対象とする（Figure
+\@ref(fig:Earthenware-plates-in-Toyama)〜\@ref(fig:Earthenware-plates-in-Kyoto2)、Table
+\@ref(tab:site-list)）。富山の資料では、石名田木舟遺跡と富山城跡の出土量が豊富な4遺構を対象とする(Figure
+\@ref(fig:Earthenware-plates-in-Toyama))。年代観は @matsui_2019 に準拠し、4段階を設定した[^3]。京都の資料では、京都系土師器皿のモデルになったと考えられるS系列（S,Sb）を対象とするが、形が明らかに異なるヘソ皿（Sh）は除外する(Figure
+\@ref(fig:Earthenware-plates-in-Kyoto)・\@ref(fig:Earthenware-plates-in-Kyoto2))。対象とする資料やその年代観は基本的に @hirao_2019 に準拠するが、京都9B段階に1447年の被災資料とされる史跡・名勝嵐山土壙170を追加している[@morishima_2019]（Table
+\@ref(tab:site-list)-17）。
+
+[^2]: （　）内は宇野の主張に沿って筆者が補足した部分
+
+[^3]: 富山城跡の2遺構については、報告[@toyama_2018]や堀内の編年案[@horiuchi_2019]では年代観が逆。
+
+```{r Types-of-earthenware-plates,echo=FALSE,fig.cap="富山県における15〜16世紀の土師器皿の型式分類",fig.width=image_width_2_col_inch}
+knitr::include_graphics(here("analysis", "figures", "1中世土師器皿の分類.png"))
+```
+
+```{r site-list}
+#分析対象とした遺跡の一覧表を表示。
+site_list <- readr::read_rds(here("analysis/data/site_list.rds"))
+knitr::kable(site_list,caption = "分析対象とした遺跡・遺構")
+```
+
+```{r Earthenware-plates-in-Toyama, echo=FALSE, fig.cap="富山の京都系土師器皿"}
+knitr::include_graphics(here("analysis", "figures", "toyama.png"))
+```
+
+```{r Earthenware-plates-in-Kyoto, echo=FALSE, fig.cap="京都産土師器皿1"}
+knitr::include_graphics(here("analysis", "figures", "kyoto1.png"))
+```
+
+```{r Earthenware-plates-in-Kyoto2, echo=FALSE, fig.cap="京都産土師器皿2"}
+knitr::include_graphics(here("analysis", "figures", "kyoto2.png"))
+```
+
+## 方法
+
+分析はmacOS Monterey ver12.0.1およびR
+ver4.1.1[@rcoreteam_2021][^4]で行った。本稿で使用したコードはWang・Marwick[-@Wang_Marwick_2020_2]を参考にしており、全て筆者のGitHubに掲載している（<https://github.com/MatsuiHironobu/gmm_toyama_2021>）。なお、本稿では口縁の法量を基準として、小型品と中大型品に分けて分析している。それぞれ、富山では、調整が「の」字状ナデから「2」字状ナデに変わる10.7cmを境とし、京都では、9C段階を指標として法量がはっきりと分かれる10.5cmを境としている。
+
+[^4]: Rとは統計解析向けのプログラミング言語および開発環境のこと。オープンソース、フリーソフトで汎用性・再現性に優れる。「パッケージ」という関数やデータセットをまとめた拡張機能の開発が盛んで、それによって様々な分析が容易に実行できる。
+
+### 幾何学的形態測定学
+
+```{r include=FALSE}
+#Rスクリプトを読み取り（詳細は下記Rscript,prepare.Rmdを参照）
+source("analysis/data/momocs_prepare.R")
+```
+
+土師器皿の「形」から、どの段階の京都産土師器皿が富山の京都系土師器皿に影響を与えたかを明らかにするため、幾何学的形態測定学的手法を用いる。幾何学的形態測定学（Geometric
+Morphometrics）は、形態構造の直交座標を用いて、形の定量化と分析を行う研究手法である。幾何学的形態測定学は標識点ベース形態測定学と輪郭ベース形態測定学の2つに大別され、今回行う楕円フーリエ解析は後者に属する分析手法である[^5]。理論的な背景については、@ubukata_2005 や @tamura_2017 らがまとめた解説がある。幾何学的形態測定学、特に楕円フーリエ解析の日本考古学への応用事例は、 @kaneda_2012 、 @tamura_arimatsu_yamaguchi_matsumoto_2017 、 @matsui_2019 がある。
+
+[^5]: 閉曲線である対象の輪郭を周期関数に変換し、そのフーリエ級数展開により導かれたフーリエ係数により形状を解析する[@ubukata_2005]。解析した情報は主成分分析などで可視化することができる。
+
+楕円フーリエ解析をするにあたって、事前準備から分析まで一連で実行可能なRパッケージのMomocs
+ver1.3.3[@Bonhomme_2014]を使用した。Momocsでは2値化したjpg画像から輪郭線のデータを抽出することが可能であり、この画像は報告書等からスキャンした図面から作成した。具体的には、断面のアウトラインをAdobe
+Photoshopで範囲選択後パスに変換、新しいファイルにコピーし、このパスのスケールを等倍にし、黒色で塗りつぶした（解像度は300dpi）。Momocsで抽出した輪郭データは位置・サイズ・向きの影響を除去するために、実測図の中心線と断面図の交点、口縁の端部にランドマークを設定し、GPA
+(Generalized Procrustes
+Analysis;一般化プロクラステス分析）で「形」の情報飲みに規格化したのち、楕円フーリエ解析した（Figure
+\@ref(fig:GPA-Stack)）。解析で得られた結果は、主成分分析を行い可視化した。
+
+```{r GPA-Stack, echo=FALSE, fig.cap='GPAで規格化した断面の重ね合わせ。左上から反時計回りに1〜3の標識点を設置した。'}
+png(here("analysis/figures/GPA_stack.png"), res = 300, w = 2000, h = 1000)
+par(family = "IPAexGothic")
+par(mfrow=c(1,2))
+stack(shape_small_combine, title = "小型品")
+stack(shape_large_combine, title = "中大型品")
+invisible(dev.off())
+
+knitr::include_graphics(here("analysis/figures/GPA_stack.png"))
+```
+
+### 統計解析
+
+楕円フーリエ解析で得られた主成分得点を多変量分散分析（MANOVA; Multivariate Analysis of Variace）し、各段階の形の有意差を検証した。MANOVAは分散分析（ANOVA）が発展したもので、複数の変量（従属変数）から、独立変数（グループ）間の平均値の差を調べることができる。分析では富山と京都の各段階の主成分得点を従属変数としている。また、主成分得点の変動係数（CV; Coefficient of Variance）を計算して、形の標準化を示す値とする。変動係数は標準偏差を平均値で割った、データの散らばり（分散）を示す係数で、広く用いられている統計的尺度である。これによって、異なるサンプルサイズ、単位、平均値で測定されたサンプルの分散を比較することができる。この値が高いほどデータの分散が大きく、低いほど分散が小さいことを示す。考古学では標準化の度合いを調べるのに有効とされている[@Eerkens_Bettinger_2001]。
+
+これまでの土師器皿の研究においても重要視されているのがサイズ、特に口径である。そのため、小型品・中大型品それぞれで箱ひげ図及びヒストグラムを作成し分布を調べた。そして、口径の変動係数も計算し、主成分スコアの変動係数との関係を散布図で示した。各段階の口径の平均値に差があるかを確認するために、t検定（ウェルチ検定）を行った[^6]。
+
+[^6]:ウェルチ検定は正規性を仮定し、等分散性は仮定しない分析方法であるが、正規性が担保されない場合でも検定精度がある程度担保される（正規性・等分散性を仮定しない中央値を比較する場合Brunner-Munzel検定があるが、今回は平均値を比較するため採用しなかった）。
+
+# 分析結果
+
+```{r count-table}
+count_join_sum <- readr::read_rds(here("analysis/data/count_join_sum.rds"))
+knitr::kable(count_join_sum,caption = "分析に用いた各段階の個数（個）。外れ値はうち数")
+```
+
+```{r include=FALSE}
+#主成分得点を計算
+##small
+Cumulative_Proportion_small <- 
+  summary(pca_small_combine2)$importance %>% 
+  as.data.frame %>% mutate_if(is.numeric, round, 4)
+Cumulative_Proportion_small <- as.data.frame(t(Cumulative_Proportion_small))
+Cumulative_Proportion_small <- Cumulative_Proportion_small %>% 
+  mutate(寄与率 = paste(Cumulative_Proportion_small[,2]*100))
+
+##large
+Cumulative_Proportion_large <- 
+  summary(pca_large_combine2)$importance %>% 
+  as.data.frame %>% mutate_if(is.numeric, round, 4)
+Cumulative_Proportion_large <- as.data.frame(t(Cumulative_Proportion_large))
+Cumulative_Proportion_large <- Cumulative_Proportion_large %>% 
+  mutate(寄与率 = paste(Cumulative_Proportion_large[,2]*100))
+
+```
+
+主成分分析で外れ値として抽出されたものが、小型品で`r sum(count_join_sum[1:8,3])`個、中大型品で`r sum(count_join_sum[1:8,5])`個あり、その後の分析からも除外している（Table
+\@ref(tab:count-table)）。
+
+Figure
+\@ref(fig:TPS-PCA-Small)左は、楕円フーリエ解析の結果から各段階の平均的な形を算出したもので、小型品の富山と京都のほぼ同じ時期の組み合わせを比較している。富山1段階が京都9B段階よりも京都9C段階に類似し、富山4段階が京都10B段階よりも相対的に厚く、形も異なることがわかる。Figure
+\@ref(fig:TPS-PCA-Small)右は、小型品の楕円フーリエ解析の結果を主成分分析したもので、円は50％の信頼区間を表している。第1～3主成分で全体の`r sum(Cumulative_Proportion_small[1:3,2])*100`%を要約し、そのうち第1主成分（PC1）で`r Cumulative_Proportion_small[1,4]`%、第2主成分（PC2）で`r Cumulative_Proportion_small[2,4]`%、第3主成分（PC3）で`r Cumulative_Proportion_small[3,4]`%を説明する。PC1は相対的な体部の厚さ、PC2は体部～口縁部の外反度合、PC3は腰部の屈曲度合を特徴として捉えている。富山1〜3段階は比較的まとまり、京都9C～10B段階よりも相対的に厚手なものが多く、富山4段階はそれらよりも大きく離れている（Figure
+\@ref(fig:TPS-PCA-Small)右上）。京都9B段階は第3主成分で京都9C～10A段階と離れる傾向にある（Figure
+\@ref(fig:TPS-PCA-Small)右下）。
+
+またFigure
+\@ref(fig:TPS-PCA-Small)右からは、富山・京都ともに体部～口縁部にかけて外反度合が弱くなる方向へ変化し、京都では体部の屈曲が弱くなる方向へ変化することがわかる。この京都の変化は、10段階の皿Sの丸底化として把握されている先行研究の指摘と一致する（@komori_uemura_1996、@morishima_2019）。
+
+Figure
+\@ref(fig:TPS-PCA-Large)左の平均的な形の比較から、中大型品も小型品と同様に、富山1段階が京都9B 段階よりも京都9C段階に類似し、富山4段階が京都10B段階よりも相対的に厚く、形が異なることがわかる。Figure
+\@ref(fig:TPS-PCA-Large)右は、中大型品の楕円フーリエ解析の結果を主成分分析したもので、PC1〜PC3で全体の`r sum(Cumulative_Proportion_large[1:3,2])*100`%を要約し、そのうちPC1で`r Cumulative_Proportion_large[1,4]`%、PC2で`r Cumulative_Proportion_large[2,4]`%、PC3で`r Cumulative_Proportion_large[3,4]`%を説明する。小型品と同じくPC1は相対的な体部の厚さ、PC2は相対的な体部（底部）の長さ、PC3は腰部の屈曲度合を特徴として捉えている。京都9C～10B段階と富山1・2段階が比較的まとまり、京都9B
+段階、富山3・4段階がそれぞれ離れて分布している（Figure
+\@ref(fig:TPS-PCA-Large)右）。
+
+また\@ref(fig:TPS-PCA-Large)右上からは、京都で体部の長さが減じる方向が見てとれ、10段階における皿形化（器高の低下、体部～口縁部の矮小化）を指摘している先行研究と一致する[@komori_uemura_1996 ]。
+
+```{r include=FALSE}
+##日本語フォントが必要な場合にpar(family = "IPAexGothic")を入力
+#第1・2主成分の結果を出力（小型品）
+png(here("analysis/figures/pca_small_combine.png"), res = 300, w = 2000, h = 1500)
+par(family = "IPAexGothic")
+plot(0)
+plot_PCA(pca_small_combine2,~Phase,
+         morphospace_position = "range",
+         axes = c(1,2),
+         points = FALSE, #layer_points()で指定するのでFALSE
+         chull = FALSE,
+         center_origin = FALSE,
+         labelpoints = FALSE, #TRUEにするとファイル名で表示する
+         palette = col_solarized)%>%
+  layer_points(cex=1, pch = as.integer(pca_small_combine2[["fac"]][["Phase"]]))%>%
+  layer_legend(cex =1/4,)%>%
+  layer_ellipses(conf=0.5,lwd=2)%>%
+  layer_labelgroups(cex=2/3)
+
+invisible(dev.off())
+
+#第1・3主成分の結果を出力（小型品）
+png(here("analysis/figures/pca_small_combine_2.png"), res = 300, w = 2000, h = 1500)
+par(family = "IPAexGothic")
+plot(0)
+plot_PCA(pca_small_combine2,~Phase,
+         morphospace_position = "range",
+         axes = c(1,3),
+         points = FALSE, #layer_points()で指定するのでFALSE
+         chull = FALSE,
+         center_origin = FALSE,
+         labelpoints = FALSE, #TRUEにするとファイル名で表示する
+         palette = col_solarized)%>%
+  layer_points(cex=1, pch = as.integer(pca_small_combine2[["fac"]][["Phase"]]))%>%
+  layer_legend(cex =1/4)%>%
+  layer_ellipses(conf=0.5,lwd=2)%>%
+  layer_labelgroups(cex=2/3)
+
+invisible(dev.off())
+
+#第1・2主成分の結果を出力（中大型品）
+png(here("analysis/figures/pca_large_combine.png"), res = 300, w = 2000, h = 1500)
+par(family = "IPAexGothic")
+plot(0)
+plot_PCA(pca_large_combine2,~Phase,
+         morphospace_position = "range",
+         axes = c(1,2),
+         points = FALSE, #layer_points()で指定するのでFALSE
+         chull = FALSE,
+         center_origin = FALSE,
+         labelpoints = FALSE, #TRUEにするとファイル名で表示する
+         palette = col_solarized)%>%
+  layer_points(cex=1, pch = as.integer(pca_large_combine2[["fac"]][["Phase"]]))%>%
+  layer_legend(cex =2)%>%
+  layer_ellipses(conf=0.5,lwd=2)%>%
+  layer_labelgroups(cex=2/3)
+
+invisible(dev.off())
+
+#第1・3主成分の結果を出力（中大型品）
+png(here("analysis/figures/pca_large_combine_2.png"), res = 300, w = 2000, h = 1500)
+par(family = "IPAexGothic")
+plot(0)
+plot_PCA(pca_large_combine2,~Phase,
+         morphospace_position = "range",
+         axes = c(1,3),
+         points = FALSE, #layer_points()で指定するのでFALSE
+         chull = FALSE,
+         center_origin = FALSE,
+         labelpoints = FALSE, #TRUEにするとファイル名で表示する
+         palette = col_solarized)%>%
+  layer_points(cex=1, pch = as.integer(pca_large_combine2[["fac"]][["Phase"]]))%>%
+  layer_legend(cex =2)%>%
+  layer_ellipses(conf=0.5,lwd=2)%>%
+  layer_labelgroups(cex=2/3)
+
+invisible(dev.off())
+```
+
+```{r include=FALSE}
+#MeanShapeの可視化
+#Momocs::MSHAPESを使って、楕円フーリエ解析の結果から平均的な形を分析
+meanshapes_small <- f_small_combine %>% MSHAPES(~Phase)
+meanshapes_large <- f_large_combine %>% MSHAPES(~Phase)
+
+#各段階毎にmeanshapeを作成する。
+##small
+data.frame(table(f_small_combine[["fac"]]["Phase"]))
+mshp_small <- meanshapes_small$shp
+`Toyama1_small` <- mshp_small[["富山1段階"]]
+`Toyama2_small` <- mshp_small[["富山2段階"]]
+`Toyama3_small` <- mshp_small[["富山3段階"]]
+`Toyama4_small` <- mshp_small[["富山4段階"]]
+`Kyoto9B_small`<- mshp_small[["京都9B段階"]]
+`Kyoto9C_small`<- mshp_small[["京都9C段階"]]
+`Kyoto10A_small`<- mshp_small[["京都10A段階"]]
+`Kyoto10B_small`<- mshp_small[["京都10B段階"]]
+
+##large
+data.frame(table(f_large_combine[["fac"]]["Phase"]))
+mshp_large <- meanshapes_large$shp 
+`Toyama1_large` <- mshp_large[["富山1段階"]]
+`Toyama2_large` <- mshp_large[["富山2段階"]]
+`Toyama3_large` <- mshp_large[["富山3段階"]]
+`Toyama4_large` <- mshp_large[["富山4段階"]]
+`Kyoto9B_large`<- mshp_large[["京都9B段階"]]
+`Kyoto9C_large`<- mshp_large[["京都9C段階"]]
+`Kyoto10A_large`<- mshp_large[["京都10A段階"]]
+`Kyoto10B_large`<- mshp_large[["京都10B段階"]]
+
+#Thin plate spline analysis(TPS)
+##作図その1
+png(here("analysis/figures/tps1_1.png"), res = 300, w = 1000, h = 1300)
+par(family = "IPAexGothic")
+par(mfrow=c(2,1)) # 図の形を決める
+tps_grid(Kyoto9B_small,Toyama1_small,
+         shp.lwd = c(2,2),
+         shp.border = c("red","blue"),
+         amp = 1,grid.size = 18,
+         legend.text = c("京都9B段階（小）","富山1段階（小）"))
+
+tps_grid(Kyoto9C_small,Toyama1_small,
+         shp.lwd = c(2,2),
+         shp.border = c("red","blue"),
+         amp = 1,grid.size = 18,
+         legend.text = c("京都9C段階（小）","富山1段階（小）"))
+
+invisible(dev.off())
+
+png(here("analysis/figures/tps1_2.png"), res = 300, w = 1000, h = 1300)
+par(family = "IPAexGothic")
+par(mfrow=c(2,1)) # 図の形を決める
+tps_grid(Kyoto10A_small,Toyama2_small,
+         shp.lwd = c(2,2),
+         shp.border = c("red","blue"),
+         amp = 1,grid.size = 18,
+         legend.text = c("京都10A段階（小）","富山2段階（小）"))
+
+tps_grid(Kyoto10B_small,Toyama4_small,
+         shp.lwd = c(2,2),
+         shp.border = c("red","blue"),
+         amp = 1,grid.size = 18,
+         legend.text = c("京都10B段階（小）","富山4段階（小）"))
+
+invisible(dev.off())
+
+##作図その2
+png(here("analysis/figures/tps2_1.png"), res = 300, w = 1000, h = 1300)
+par(family = "IPAexGothic")
+par(mfrow=c(2,1)) # 図の形を決める
+tps_grid(Kyoto9B_large,Toyama1_large,
+         shp.lwd = c(2,2),
+         shp.border = c("red","blue"),
+         amp = 1,grid.size = 18,
+         legend.text = c("京都9B段階（大）","富山1段階（大）"))
+
+tps_grid(Kyoto9C_large,Toyama1_large,
+         shp.lwd = c(2,2),
+         shp.border = c("red","blue"),
+         amp = 1,grid.size = 18,
+         legend.text = c("京都9C段階（大）","富山1段階（大）"))
+
+invisible(dev.off())
+
+png(here("analysis/figures/tps2_2.png"), res = 300, w = 1000, h = 1300)
+par(family = "IPAexGothic")
+par(mfrow=c(2,1)) # 図の形を決める
+tps_grid(Kyoto10A_large,Toyama2_large,
+         shp.lwd = c(2,2),
+         shp.border = c("red","blue"),
+         amp = 1,grid.size = 18,
+         legend.text = c("京都10A段階（大）","富山2段階（大）"))
+
+tps_grid(Kyoto10B_large,Toyama4_large,
+         shp.lwd = c(2,2),
+         shp.border = c("red","blue"),
+         amp = 1,grid.size = 18,
+         legend.text = c("京都10B段階（大）","富山4段階（大）"))
+
+invisible(dev.off())
+```
+
+```{r include=FALSE}
+library(magick)
+tps_plot1_1 <- image_read(here("analysis/figures/tps1_1.png"))
+tps_plot1_2 <- image_read(here("analysis/figures/tps1_2.png"))
+tps_plot2_1 <- image_read(here("analysis/figures/tps2_1.png"))
+tps_plot2_2 <- image_read(here("analysis/figures/tps2_2.png"))
+
+pca_plot1_1 <- image_read(here("analysis/figures/pca_small_combine.png"))
+pca_plot1_2 <- image_read(here("analysis/figures/pca_small_combine_2.png"))
+pca_plot2_1 <- image_read(here("analysis/figures/pca_large_combine.png"))
+pca_plot2_2 <- image_read(here("analysis/figures/pca_large_combine_2.png"))
+
+img1_1 <- image_scale(c(pca_plot1_1,pca_plot1_2),"x1000")
+img1_2 <- image_scale(c(tps_plot1_1,tps_plot1_2),"x1000")
+pca_plot_append1_1 <- image_append(img1_1,stack = TRUE)
+pca_plot_append1_2 <- image_append(img1_2,stack = TRUE)
+
+image_scale(c(pca_plot_append1_2,pca_plot_append1_1),"x1000")%>%
+  image_append(stack = FALSE)%>%
+  image_write(here("analysis/figures/tps_pca_plot_append1.png"))
+
+img2_1 <- image_scale(c(pca_plot2_1,pca_plot2_2) ,"x1000")
+img2_2 <- image_scale(c(tps_plot2_1,tps_plot2_2) ,"x1000")
+pca_plot_append2_1 <- image_append(img2_1,stack = TRUE)
+pca_plot_append2_2 <- image_append(img2_2,stack = TRUE)
+
+image_scale(c(pca_plot_append2_2,pca_plot_append2_1),"x1000")%>%
+  image_append(stack = FALSE)%>%
+  image_write(here("analysis/figures/tps_pca_plot_append2.png"))
+```
+
+```{r TPS-PCA-Small, echo=FALSE, fig.cap='小型品の分析。左：薄板スプライン法（Thin Plate Splines）を使用した富山・京都の土師器皿の平均的な形の比較。右：主成分分析結果をプロットした各段階の分布を比較'}
+knitr::include_graphics(here("analysis/figures/tps_pca_plot_append1.png"))
+```
+
+```{r TPS-PCA-Large, echo=FALSE,  fig.cap='中大型品の分析。左：薄板スプライン法（Thin Plate Splines）を使用した富山・京都の平均的な形の比較。右：主成分分析結果をプロットした各段階の分布を比較'}
+knitr::include_graphics(here("analysis/figures/tps_pca_plot_append2.png"))
+```
+
+Table
+\@ref(tab:MANOVA-table-small)・
+\@ref(tab:MANOVA-table-large)は、Figure
+\@ref(fig:TPS-PCA-Small)・
+\@ref(fig:TPS-PCA-Large)の主成分得点によって示される形の変数の分布を比較するために、多変量分散分析（MANOVA）を使って、富山と京都の各段階のペアの組み合わせを比較した結果である。これをみると、中大型品の富山1段階と2段階のペアを除いて、いずれの段階のペアも統計的に有意な差があることがわかり、Figure
+\@ref(fig:TPS-PCA-Small)・
+\@ref(fig:TPS-PCA-Large)の視覚的な違いと一致する。
+
+
+```{r MANOVA-table-prepare, include=FALSE}
+#コードはprepareを参照
+summary_manv_small_tab <- readr::read_rds(here("analysis/data/summary_manv_small_tab.rds"))
+summary_manv_large_tab <- readr::read_rds(here("analysis/data/summary_manv_large_tab.rds"))
+```
+
+```{r MANOVA-table-small}
+options(scipen = 4)
+knitr::kable(summary_manv_small_tab, row.names = FALSE, caption = "小型品の主成分スコアにおける多変量分散分析（MANOVA）の概要。Pillai’s traceはMANOVAによって生成される統計量で、1に近いほど、独立変数が従属変数の値に統計的に有意な効果を持つという。Approximate F valueはF値、degrees of freedomは自由度、Pr(>F)はF値をｐ値に置き換えたものである（有意水準５％）。")
+```
+
+```{r MANOVA-table-large}
+options(scipen = 4)
+knitr::kable(summary_manv_large_tab, row.names = FALSE, caption = "中大型品の主成分スコアにおける多変量分散分析（MANOVA）の概要")
+```
+
+Figure
+\@ref(fig:PCs-CV-Small)・
+\@ref(fig:PCs-CV-Large) はPC1～3と各主成分の変動係数の関係を示したものである。富山と京都の各段階のどの主成分で差が大きくなるか、より視覚的にわかる。富山では小型品・中大型品ともにPC1で差が大きく、京都では小型品はPC2・3、中大型品はPC2で差が大きい。各主成分の変動係数に注目すると、PC1において、富山の小型品・中大型品が変動係数が4段階で増加する傾向にあり、特に小型品ではPC2・3でも同じ傾向にある。京都では、小型品・中大型品どちらとも、各主成分の変動係数が同程度で推移する傾向にある。
+
+```{r}
+#Rスクリプトを読み取り（詳細は下記Rscript,prepare.Rmdを参照）
+source("analysis/data/pcs_cv_violin.R")
+```
+
+```{r PCs-CV-Small, echo=FALSE, fig.cap='小型品の各段階の主成分スコアと変動係数CV(%)'}
+knitr::include_graphics(here("analysis/figures/PCs_CV_small.jpg"))
+```
+
+```{r PCs-CV-Large, echo=FALSE, fig.cap='中大型品の各段階の主成分スコアと変動係数CV(%)'}
+knitr::include_graphics(here("analysis/figures/PCs_CV_large.jpg"))
+```
+
+```{r}
+#Rスクリプトを読み取り（詳細は下記Rscript,prepare.Rmdを参照）
+source("analysis/data/pcs_cv_boxplot.R")
+```
+
+```{r Welch-t-test}
+# 富山1〜4段階の口径の平均値についてt検定を行う。
+# 帰無仮説H0:x段階＝y段階を否定することで、対立仮説H1を支持する。
+# 等分散を仮定しないt検定（ウェルチのt検定、var.equal=FALSE）
+# 基本的に正規分布を仮定していますが、仮定できない場合でも高い精度を維持できると言われています。https://www.researchgate.net/publication/226351592_The_two-sample_t_test_Pre-testing_its_assumptions_does_not_pay_off
+tT1_T2_small <- 
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山1段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山2段階"],
+         var.equal=FALSE)
+
+tT1_T3_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山1段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山3段階"],
+         var.equal=FALSE)
+
+tT1_T4_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山1段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山4段階"],
+         var.equal=FALSE)
+
+tT2_T3_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山2段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山3段階"],
+         var.equal=FALSE)
+
+tT2_T4_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山2段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山4段階"],
+         var.equal=FALSE)
+
+tT3_T4_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山3段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山4段階"],
+         var.equal=FALSE)
+
+tT1_K9C_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山1段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都9C段階"],
+         var.equal=FALSE)
+
+tT2_K9C_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山2段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都9C段階"],
+         var.equal=FALSE)
+
+tT4_K10B_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山4段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都10B段階"],
+         var.equal=FALSE)
+
+tK9C_K10B_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都9C段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都10B段階"],
+         var.equal=FALSE)
+tK10A_K10B_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都10A段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都10B段階"],
+         var.equal=FALSE)
+
+t_small_group_vector <- c("富山1段階vs富山2段階",
+                          "富山1段階vs富山3段階",
+                          "富山1段階vs富山4段階",
+                          "富山2段階vs富山3段階",
+                          "富山2段階vs富山4段階",
+                          "富山3段階vs富山4段階",
+                          "富山1段階vs京都9C段階",
+                          "富山2段階vs京都9C段階",
+                          "富山4段階vs京都10B段階",
+                          "京都9C段階vs京都10B段階",
+                          "京都10A段階vs京都10B段階")
+
+t_small_t_vector <- c(tT1_T2_small[["statistic"]][["t"]],
+                      tT1_T3_small[["statistic"]][["t"]],
+                      tT1_T4_small[["statistic"]][["t"]],
+                      tT2_T3_small[["statistic"]][["t"]],
+                      tT2_T4_small[["statistic"]][["t"]],
+                      tT3_T4_small[["statistic"]][["t"]],
+                      tT1_K9C_small[["statistic"]][["t"]],
+                      tT2_K9C_small[["statistic"]][["t"]],
+                      tT4_K10B_small[["statistic"]][["t"]],
+                      tK9C_K10B_small[["statistic"]][["t"]],
+                      tK10A_K10B_small[["statistic"]][["t"]])
+
+t_small_df_vector <- c(tT1_T2_small[["parameter"]][["df"]],
+                       tT1_T3_small[["parameter"]][["df"]],
+                       tT1_T4_small[["parameter"]][["df"]],
+                       tT2_T3_small[["parameter"]][["df"]],
+                       tT2_T4_small[["parameter"]][["df"]],
+                       tT3_T4_small[["parameter"]][["df"]],
+                       tT1_K9C_small[["parameter"]][["df"]],
+                       tT2_K9C_small[["parameter"]][["df"]],
+                       tT4_K10B_small[["parameter"]][["df"]],
+                       tK9C_K10B_small[["parameter"]][["df"]],
+                       tK10A_K10B_small[["parameter"]][["df"]])
+
+t_small_p_vector <- c(tT1_T2_small[["p.value"]],
+                      tT1_T3_small[["p.value"]],
+                      tT1_T4_small[["p.value"]],
+                      tT2_T3_small[["p.value"]],
+                      tT2_T4_small[["p.value"]],
+                      tT3_T4_small[["p.value"]],
+                      tT1_K9C_small[["p.value"]],
+                      tT2_K9C_small[["p.value"]],
+                      tT4_K10B_small[["p.value"]],
+                      tK9C_K10B_small[["p.value"]],
+                      tK10A_K10B_small[["p.value"]])
+
+t_small_df <- data.frame(Phase = t_small_group_vector,
+                         t = t_small_t_vector,
+                         df = t_small_df_vector,
+                         "p-value" = t_small_p_vector) %>%
+  mutate_if(is.numeric, round, 4)
+
+```
+
+Figure \@ref(fig:df-cv-pcs-byplot-boxplot)・\@ref(fig:histogram)、Table
+\@ref(tab:Welch-t-test-table)は口径の分析結果である。Figure \@ref(fig:df-cv-pcs-byplot-boxplot)Bの通り、富山の小型品では、口径の平均値が富山4段階で`r rim_diameter_mean_label_small[4]`cmとなり、富山1段階（`r rim_diameter_mean_label_small[1]`cm）、2段階（`r rim_diameter_mean_label_small[2]`cm）よりも口径が6mm程度大きくなり、統計的に有意な結果が出た（p=`r t_small_df[3,4]`、p=`r t_small_df[5,4]`）。富山3段階は口径の平均値で富山1・2段階と近似し（`r rim_diameter_mean_label_small[3]`cm）、統計的にも差があるとは認められない（p=`r t_small_df[2,4]`、p=`r t_small_df[4,4]`）が、富山4段階とは有意な差が認められた（p=`r t_small_df[5,4]`）。京都の小型品でも口径の平均値は増加する傾向にある。
+
+小型品の変動係数について、富山では富山1・2・4段階で変動係数が4％未満と低く、富山3段階では8％と比較的高い。京都では京都9C～10B段階で7%台と富山に比べて高い結果が出た。Figure \@ref(fig:df-cv-pcs-byplot-boxplot)Aからは、富山1・2・4段階は口径の変動係数が低く、PC1の変動係数が高い傾向にあり、京都9C～10B段階は口径の変動係数が高く、PC1の変動係数は富山1・2・4段階と同程度か、より低いことがわかる。
+
+口径の分布のヒストグラムをみると（Figure \@ref(fig:histogram)）、富山1・2・4段階では小型品が1法量（8㎝台と9㎝台）であるのに対し、富山３段階では2法量確認できる。京都では、資料数の少ない京都9B段階を除くと、9C～10B段階で、小型品に2法量（8～9㎝前後、10㎝前後）あることがわかり、口径の変動係数に影響を与えている。中大型品ではいずれも12㎝前後と15㎝前後の少なくとも2～3法量が存在し、それより大きいものもわずかにある。
+
+```{r df-cv-pcs-byplot-boxplot, echo=FALSE, fig.cap='A:土師器皿（小型品）の第一主成分と口径の変動係数。B:土師器皿（小型品）の段階毎の口径分布。C:土師器皿（中大型品）の第一主成分と口径分布。D:土師器皿（中大型品）の段階毎の口径分布とその変動係数。CVとMVはそれぞれ変動係数と平均、箱ひげ図の上下の点は「外れ値」を示す。分析した対象は楕円フーリエ解析を行ったものと同一。'}
+knitr::include_graphics(here("analysis/figures/boxplot_scatterplot_small_large.jpg"))
+```
+
+```{r histogram,echo=FALSE,fig.cap="楕円フーリエ解析した資料を対象とした　富山と京都の各段階の口径分布ヒストグラム。ｘ軸は口径、ｙ軸は密度（度数）、ビン幅は0.5。"}
+diameter_1 <- size_pcs_cv_small
+colnames(diameter_1)[3] <- "jpgs_imported_coo_size"
+diameter_2 <- size_pcs_cv_large
+colnames(diameter_2)[3] <- "jpgs_imported_coo_size"
+
+diameter_df <- rbind(diameter_1,diameter_2)  #データフレームを結合
+diameter_df <- diameter_df[,-1] 
+diameter_df[["Phase"]] <-
+  factor(diameter_df[["Phase"]],
+         levels=c("富山1段階","京都9B段階","富山2段階","京都9C段階",
+                  "富山3段階","京都10A段階","富山4段階","京都10B段階"))
+
+#「最適なビン幅」は決まっていないので、状況に応じて設定
+library(tidyverse)
+ggplot(data=diameter_df)+
+  aes(x=rim_diameter,y=..density..)+
+  geom_histogram(binwidth = 0.5)+ #ヒストグラムを描写
+  facet_wrap(~Phase, scales="free_y", ncol=2)+
+  labs(x="Rim diameter(cm)", y="Density")+
+  theme_minimal(base_family = "IPAexGothic") #base_familyで日本語化
+```
+
+```{r Welch-t-test-table}
+knitr::kable(t_small_df, caption = "富山1〜4段階の口径に対するウェルチのt検定の概要")
+```
+
+# 考察
+
+楕円フーリエ解析の結果、富山1段階は同じ時期の京都9C段階に類似する一方、その前段階である京都9B段階とは離れる傾向にあることから（Figure
+\@ref(fig:TPS-PCA-Small)右・
+\@ref(fig:TPS-PCA-Large)右）、富山の京都系土師器皿は京都9C段階の京都産土師器皿の影響を強く受けて成立したと考えられる。。これは、富山1段階と京都9B・9C段階の平均的な形の比較からも直感的に理解できる（Figure
+\@ref(fig:TPS-PCA-Small)左・
+\@ref(fig:TPS-PCA-Large)左）。京都系土師器皿が15世紀後半に増加するという先行研究とも矛盾はない。
+
+富山1段階と京都9C段階の中大型品の信頼区間が小型品のそれよりも重なっていること（Figure
+\@ref(fig:TPS-PCA-Small)右・
+\@ref(fig:TPS-PCA-Large)右）、京都産土師器皿では2法量ある小型品が富山では1法量しかないこと（Figure \@ref(fig:histogram)）、富山1段階の小型品の調整が正確に京都産土師器皿を模倣していないこと[@matsui_2019][^7]から、富山では小型品のへそ皿が少ないことなどから、富山の京都系土師器皿は小型品よりも中大型品の京都産土師器皿の影響を受けたことがわかる。つまり、富山の京都系土師器皿は中大型品の模倣に重点が置かれたもので、職人の移住のような直接的な伝播はなかったと考えられる。
+
+次に富山の京都系土師器皿の展開について見ていく。富山2段階で小型品の内面調整が京都産土師器皿と同じ「の」字状ナデになっており[@matsui_2019]、少なくともこの段階までは京都の情報を入手している。一方、富山の京都系土師器皿は、富山3段階以降相対的な厚みが増す方向に変化していく傾向にあり（Figure
+\@ref(fig:TPS-PCA-Small)、\@ref(fig:TPS-PCA-Large)）、京都産土師器皿が相対的に薄手化する傾向にあることとは対照的で、富山3段階以降は京都の情報を継続的に受容していないことが伺える。
+
+また、京都9C～10B段階の口径の変動係数が富山よりも高いのは、Figure \@ref(fig:histogram)をみてもわかるように、小型品としたものに2法量程度存在する結果が反映されたものと考えられる。PC1の変動係数は、サンプル数の少ない京都9Bを除き、京都産土師器皿のほうが富山の京都系土師器皿よりも低い傾向にあり、形がより規格化されていると判断してもよい。京都では小型品の各主成分の変動係数が同水準で推移する一方、富山では富山4段階のPC1～3の変動係数が富山1～3段階よりも高くなることから、形の規格性が維持できなくなっていると考えられる。
+
+京都9C段階以降の小型品(Sb)は「口縁部のナデ[^8]が内面底部中央近くまで至り、圏状の痕跡を残さないが、中央部に溜まった泥漿[^9]を指先で拭った痕跡を持つ」[@hirao_2019]とされ、同様の調整は富山1・2段階にあり、富山3・4段階では少なくなること[@matsui_2019]からも京都系土師器皿が在地化することが伺える。京都系土師器皿の在地化が規格性の減少につながっていると考えられる。
+
+[^7]: 富山1段階（石名田木舟遺跡SD7030）の小型品において、体部内面の調整が「の」字状ナデではなく、「２」字状ナデである。
+
+[^8]: 富山県でいうと体部の調整。
+
+[^9]: でいしょう。粘土と水を混ぜ合わせて、泥のように液体状にしたもの。
+
+
+# 結論
+
+本研究では、戦国時代の富山と京都の土師器皿を対象に、幾何学的形態測定学的手法と統計学的手法を用いて、富山の京都系土師器皿がどの段階の京都産土師器皿の影響を受けたかということと、どのように変化したか、という2点について検証した。
+
+分析の結果、富山県における京都系土師器皿は、15世紀後半の京都9C段階の京都産土師器皿の中大型品の模倣を目的として成立したこと、小型品は形・サイズ・調整等の模倣が正確でなく京都産土師器皿の直接的な伝播は想定できないこと、京都の情報を継続的に受け入れず在地化していくことがわかった。
+
+今後、この研究手法を他地域で援用することで、各地域の京都系土師器皿の受容について比較できるだけでなく、定量的な手法を導入することで、より科学的な分析が可能となると期待される。
+
+## 参考文献

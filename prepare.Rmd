@@ -1,0 +1,1672 @@
+---
+title: "富山県における京都系土師器皿の受容と展開"
+subtitle: "統計解析言語Rを利用した考古学的研究（前処理編）"
+author: "松井　広信"
+date: "最終修正: `r Sys.Date()`"
+output: 
+    bookdown::word_document2:
+      fig_caption: yes
+      reference_docx: "./analysis/templates/template.docx"
+editor_options: 
+  markdown: 
+    wrap: 72
+bibliography: "./analysis/templates/mylib.bib"
+csl: "./analysis/templates/sist02-japanese_変更.csl"
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  echo = FALSE,
+  comment = "#>",
+  dpi = 300,
+  fig.path = ".analysis/figures/"
+)
+
+image_width_1_col_inch = 90/25.4 # image Single column	w = 90 mm 
+image_width_2_col_inch = 190/25.4 # image Double column w = 190 mm 
+
+library(tidyverse)
+library(Momocs)
+library(patchwork)
+library(here)
+```
+
+# 幾何学的形態測定学
+
+```{r site-list-prepare, include=FALSE}
+#分析対象とした遺跡の一覧表を作成する。
+library(tidyverse)
+site_list <- read.csv("./analysis/data/site_list.csv", header = TRUE) %>%
+  select(-文献) %>% filter(遺跡 != "山科寺内町遺跡")
+site_list["時期"] <- lapply(site_list["時期"], gsub, #gsub;文字列の置き換え
+                          pattern="富山1段階（15C後半）", 
+                          replacement = "富山1段階（1488年頃）")
+saveRDS(site_list,here("analysis/data/site_list.rds"))
+```
+
+```{r site-list}
+#分析対象とした遺跡の一覧表を表示。
+site_list <- readr::read_rds(here("analysis/data/site_list.rds"))
+knitr::kable(site_list,caption = "分析対象とした遺跡・遺構")
+```
+
+分析はmacOS Monterey ver12.0.1およびR ver4.1.1[@rcoreteam_2021]で行った[^4]。本稿で使用したコードは全て筆者のGitHubに掲載している（https://github.com/MatsuiHironobu/gmm_toyama_2021）。
+
+## Momocsを使った楕円フーリエ解析1
+
+```{r include=FALSE}
+#Rスクリプトを読み取り（下記のチャンクのデータが入っています）
+source("analysis/data/momocs_prepare.R")
+```
+
+```{r prepare-momocs1, eval=FALSE, include=FALSE}
+#import_jpg：jpg画像の読みこみ
+library(Momocs)
+database_small <- read.csv("./analysis/data/small.csv")
+jpg_small.list <- list.files("./analysis/data/small")
+list_small <- paste("./analysis/data/small/",jpg_small.list,sep="")
+coo_small <- import_jpg(list_small)
+out_small <- Out(coo_small,fac=database_small)
+
+database_large <- read.csv("./analysis/data/large.csv")
+jpg_large.list <- list.files("./analysis/data/large")
+list_large <- paste("./analysis/data/large/",jpg_large.list,sep="")
+coo_large <- import_jpg(list_large)
+out_large <- Out(coo_large,fac=database_large)
+
+saveRDS(out_small,here("analysis/data/out_small.rds"))
+saveRDS(out_large,here("analysis/data/out_large.rds"))
+```
+
+```{r prepare-momocs2}
+out_small <- readr::read_rds(here("analysis/data/out_small.rds"))
+out_large <- readr::read_rds(here("analysis/data/out_large.rds")) 
+
+#"Phase"を文字型から因子型に変更
+out_small[["fac"]][["Phase"]] <- out_small[["fac"]][["Phase"]]  %>% as.factor()
+out_large[["fac"]][["Phase"]] <- out_large[["fac"]][["Phase"]]  %>% as.factor()
+
+#読み込んだデータを表示
+panel(out_small,fac='Phase',names=TRUE)
+panel(out_large,fac='Phase',names=TRUE)
+stack(out_small)
+stack(out_large)
+```
+
+```{r prepare-momocs3, eval=FALSE, include=FALSE}
+#def_ldk(out,標識点の個数)：輪郭（out）をクリックして標識点を設定
+#coo_slide(ldk=2)：標識点2を基準に平行移動
+#fgProcrustes() ：プロクラステス重ね合わせ
+#Consoleで実行すること！
+shape_small<-def_ldk(out_small,3) %>% coo_slide(ldk=2) %>% fgProcrustes() 
+shape_large<-def_ldk(out_large,3) %>% coo_slide(ldk=2) %>% fgProcrustes() 
+
+saveRDS(shape_small,here("analysis/data/shape_small.rds"))
+saveRDS(shape_large,here("analysis/data/shape_large.rds"))
+```
+
+## データの追加その1
+```{r prepare-Momocs-add1-1, eval=FALSE, include=FALSE}
+library(Momocs)
+database_small_add <- read.csv("./analysis/data/small_add.csv")
+jpg_small_add.list <- list.files("./analysis/data/small_add")
+list_small_add <- paste("./analysis/data/small_add/",jpg_small_add.list,sep="")
+coo_small_add <- import_jpg(list_small_add)
+out_small_add <- Out(coo_small_add,fac=database_small_add)
+
+database_large_add <- read.csv("./analysis/data/large_add.csv")
+jpg_large_add.list <- list.files("./analysis/data/large_add")
+list_large_add <- paste("./analysis/data/large_add/",jpg_large_add.list,sep="")
+coo_large_add <- import_jpg(list_large_add)
+out_large_add <- Out(coo_large_add,fac=database_large_add)
+
+saveRDS(out_small_add,here("analysis/data/out_small_add.rds"))
+saveRDS(out_large_add,here("analysis/data/out_large_add.rds"))
+```
+
+```{r prepare-Momocs-add1-2}
+out_small_add <- readr::read_rds(here("analysis/data/out_small_add.rds"))
+out_large_add <- readr::read_rds(here("analysis/data/out_large_add.rds")) 
+
+#"Phase"を文字型から因子型に変更
+out_small_add[["fac"]][["Phase"]] <- out_small_add[["fac"]][["Phase"]]  %>% as.factor()
+out_large_add[["fac"]][["Phase"]] <- out_large_add[["fac"]][["Phase"]]  %>% as.factor()
+
+#読み込んだデータを表示
+panel(out_small_add,fac='Phase',names=TRUE)
+panel(out_large_add,fac='Phase',names=TRUE)
+stack(out_small_add)
+stack(out_large_add)
+```
+
+```{r prepare-Momocs-add1-3, eval=FALSE, include=FALSE}
+#def_ldk(out,標識点の個数)：輪郭（out）をクリックして標識点を設定
+#coo_slide(ldk=2)：標識点2を基準に平行移動
+#fgProcrustes() ：プロクラステス重ね合わせ
+#Consoleで実行すること！
+shape_small_add <- def_ldk(out_small_add,3) %>% coo_slide(ldk=2) %>% fgProcrustes() 
+shape_large_add <- def_ldk(out_large_add,3) %>% coo_slide(ldk=2) %>% fgProcrustes() 
+
+saveRDS(shape_small_add,here("analysis/data/shape_small_add.rds"))
+saveRDS(shape_large_add,here("analysis/data/shape_large_add.rds"))
+```
+
+## データの追加2
+```{r prepare-Momocs-add2-1, eval=FALSE, include=FALSE}
+library(Momocs)
+database_add <- read.csv("./analysis/data/add2.csv") %>%
+  filter(Target != "FALSE")
+jpg_add.list <- list.files("./analysis/data/add2")
+list_add <- paste("./analysis/data/add2/",jpg_add.list,sep="")
+coo_add <- import_jpg(list_add)
+out_add <- Out(coo_add,fac=database_add)
+
+saveRDS(out_add,here("analysis/data/out_add.rds"))
+```
+
+```{r prepare-Momocs-add2-2}
+out_add <- readr::read_rds(here("analysis/data/out_add.rds"))
+
+#"Phase"を文字型から因子型に変更
+out_add[["fac"]][["Phase"]] <- out_add[["fac"]][["Phase"]]  %>% as.factor()
+
+#読み込んだデータを表示
+panel(out_add,fac='Phase',names=TRUE)
+stack(out_add)
+```
+
+```{r prepare-Momocs-add2-3, eval=FALSE, include=FALSE}
+#def_ldk(out,標識点の個数)：輪郭（out）をクリックして標識点を設定
+#coo_slide(ldk=2)：標識点2を基準に平行移動
+#fgProcrustes() ：プロクラステス重ね合わせ
+#Consoleで実行すること！
+shape_add <- def_ldk(out_add,3) %>% coo_slide(ldk=2) %>% fgProcrustes() 
+saveRDS(shape_add,here("analysis/data/shape_add.rds"))
+```
+
+## データの統合
+```{r prepare-Momocs-combine-all-1}
+shape_small <- readr::read_rds(here("analysis/data/shape_small.rds"))
+shape_large <- readr::read_rds(here("analysis/data/shape_large.rds"))
+shape_small_add <- readr::read_rds(here("analysis/data/shape_small_add.rds"))
+shape_large_add <- readr::read_rds(here("analysis/data/shape_large_add.rds"))
+shape_add <- readr::read_rds(here("analysis/data/shape_add.rds"))
+
+library(Momocs)
+shape_all_combine <- 
+  combine(shape_small,shape_large,shape_small_add,shape_large_add,shape_add)%>%
+  coo_slide(ldk=2) %>%
+  fgProcrustes() %>%
+  filter(Site!="山科寺内町遺跡")
+
+shape_all_combine$fac <-
+  shape_all_combine$fac %>%
+  dplyr::mutate(Phase = case_when(
+    str_detect(remains,"SE0922")~"京都9C段階",
+    str_detect(remains,"SK2185")~"京都10A段階",
+    str_detect(remains,"土壙170")~"京都9B段階",
+    str_detect(remains,"SK415")~"京都9C段階",
+    str_detect(remains,"土坑170")~"京都9C段階",
+    str_detect(remains,"SK499")~"京都10A段階",
+    str_detect(remains,"SD166上層")~"京都10B段階",
+    str_detect(remains,"土坑2134")~"京都10A段階",
+    str_detect(remains,"SD7003")~"富山2段階",
+    str_detect(remains,"SD7030")~"富山1段階",
+    str_detect(remains,"2SK705")~"富山4段階",
+    str_detect(remains,"3SD54")~"富山3段階",
+    str_detect(remains,"SK0366")~"京都9B段階",
+    str_detect(remains,"SK769")~"京都9B段階",
+    str_detect(remains,"SK145")~"京都9B段階",
+    str_detect(remains,"SK144B")~"京都10A段階",
+    str_detect(remains,"SK8-18")~"京都10B段階",
+    str_detect(remains,"溝5下層")~"京都10B段階",))
+
+shape_all_combine$fac$Phase <-
+  factor(shape_all_combine$fac$Phase,
+         levels=c("富山1段階", "富山2段階","富山3段階","富山4段階",
+                  "京都9B段階","京都9C段階","京都10A段階","京都10B段階"))
+
+saveRDS(shape_all_combine,here("analysis/data/shape_all_combine.rds"))
+```
+
+## データの加工
+
+```{r include=FALSE}
+shape_all_combine <- readr::read_rds(here("analysis/data/shape_all_combine.rds"))
+
+shape_toyama_combine <-
+  shape_all_combine %>%
+  Momocs::filter(Prefecture == "Toyama")
+
+#調整の違いを基に小型品と中大型品を分ける。
+#SD7030
+shape_toyama_small_1 <-
+  shape_toyama_combine %>%
+  Momocs::filter(remains == "SD7030") %>%
+  Momocs::filter(Report_ID < 4906)
+
+shape_toyama_large_1 <-
+  shape_toyama_combine %>%
+  Momocs::filter(remains == "SD7030") %>%
+  Momocs::filter(Report_ID >= 4906)
+
+#SD7003
+shape_toyama_small_2 <-
+  shape_toyama_combine %>%
+  Momocs::filter(remains == "SD7003") %>%
+  Momocs::filter(Report_ID < 4504)
+
+shape_toyama_large_2 <-
+  shape_toyama_combine %>%
+  Momocs::filter(remains == "SD7003") %>%
+  Momocs::filter(Report_ID >= 4504)
+
+#3SD54
+shape_toyama_small_3 <-
+  shape_toyama_combine %>%
+  Momocs::filter(remains == "3SD54") %>%
+  Momocs::filter(Report_ID < 594)
+
+shape_toyama_large_3 <-
+  shape_toyama_combine %>%
+  Momocs::filter(remains == "3SD54") %>%
+  Momocs::filter(Report_ID >= 594)
+
+#2SK705
+shape_toyama_small_4 <-
+  shape_toyama_combine %>%
+  Momocs::filter(remains == "2SK705") %>%
+  Momocs::filter(rim_diameter < 10.9)
+
+shape_toyama_large_4 <-
+  shape_toyama_combine %>%
+  Momocs::filter(remains == "2SK705") %>%
+  Momocs::filter(rim_diameter >= 10.9)
+
+#富山の小型品
+shape_toyama_combine_small <- 
+  combine(shape_toyama_small_1,shape_toyama_small_2,shape_toyama_small_3,shape_toyama_small_4)%>%
+  coo_slide(ldk=2) %>%
+  fgProcrustes()
+
+#富山の中大型品
+shape_toyama_combine_large <- 
+  combine(shape_toyama_large_1,shape_toyama_large_2,shape_toyama_large_3,shape_toyama_large_4)%>%
+  coo_slide(ldk=2) %>%
+  fgProcrustes()
+
+#保存
+saveRDS(shape_toyama_combine_small,here("analysis/data/shape_toyama_combine_small.rds"))
+saveRDS(shape_toyama_combine_large,here("analysis/data/shape_toyama_combine_large.rds"))
+```
+
+```{r include=FALSE}
+shape_all_combine <- readr::read_rds(here("analysis/data/shape_all_combine.rds"))
+
+shape_kyoto_combine <-
+  shape_all_combine %>%
+  Momocs::filter(Prefecture == "Kyoto")
+
+#京都の小型品（9C段階を参考に機械的に10.5以下を小型品とする）
+shape_kyoto_combine_small <-
+  shape_kyoto_combine %>%
+  Momocs::filter(rim_diameter <= 10.5)
+
+#京都の中大型品
+shape_kyoto_combine_large <-
+  shape_kyoto_combine %>%
+  Momocs::filter(rim_diameter > 10.5)
+
+#保存
+saveRDS(shape_kyoto_combine_small,here("analysis/data/shape_kyoto_combine_small.rds"))
+saveRDS(shape_kyoto_combine_large,here("analysis/data/shape_kyoto_combine_large.rds"))
+```
+
+```{r}
+shape_toyama_combine_small <- readr::read_rds(here("analysis/data/shape_toyama_combine_small.rds"))
+shape_toyama_combine_large <- readr::read_rds(here("analysis/data/shape_toyama_combine_large.rds"))
+shape_kyoto_combine_small <- readr::read_rds(here("analysis/data/shape_kyoto_combine_small.rds"))
+shape_kyoto_combine_large <- readr::read_rds(here("analysis/data/shape_kyoto_combine_large.rds"))
+library(Momocs)
+
+shape_small_combine <- 
+  Momocs::combine(shape_toyama_combine_small,shape_kyoto_combine_small)
+
+shape_large_combine <- 
+  Momocs::combine(shape_toyama_combine_large,shape_kyoto_combine_large)
+
+saveRDS(shape_small_combine,here("analysis/data/shape_small_combine.rds"))
+saveRDS(shape_large_combine,here("analysis/data/shape_large_combine.rds"))
+```
+
+
+```{r GPA-Stack, echo=FALSE, fig.cap='GPAで正規化した断面の重ね合わせ'}
+shape_small_combine <- readr::read_rds(here("analysis/data/shape_small_combine.rds"))
+shape_large_combine <- readr::read_rds(here("analysis/data/shape_large_combine.rds"))
+
+png(here("analysis/figures/GPA_stack.png"), res = 300, w = 2000, h = 1000)
+par(family = "IPAexGothic")
+par(mfrow=c(1,2))
+stack(shape_small_combine, title = "小型品")
+stack(shape_large_combine, title = "中大型品")
+invisible(dev.off())
+
+knitr::include_graphics(here("analysis/figures/GPA_stack.png"))
+```
+
+## 楕円フーリエ解析と主成分分析
+```{r prepare-Momocs-combine-all-2}
+shape_small_combine <- readr::read_rds(here("analysis/data/shape_small_combine.rds"))
+shape_large_combine <- readr::read_rds(here("analysis/data/shape_large_combine.rds"))
+library(Momocs)
+
+#調和数を特定(#をとって分析)
+# calibrate_harmonicpower_efourier(shape_small_combine,nb.h=30)
+# calibrate_harmonicpower_efourier(shape_large_combine,nb.h=30)
+
+#楕円フーリエ解析
+f_small_combine <- efourier(shape_small_combine,nb.h=16,norm=FALSE)
+f_large_combine <- efourier(shape_large_combine,nb.h=17,norm=FALSE)
+
+saveRDS(f_small_combine,here("analysis/data/f_small_combine.rds"))
+saveRDS(f_large_combine,here("analysis/data/f_large_combine.rds"))
+```
+
+```{r prepare-Momocs-combine3}
+library(Momocs)
+#あらかじめ用意した楕円フーリエ解析したデータとそれを主成分分析したデータを読み込む
+f_small_combine <- readr::read_rds(here("analysis/data/f_small_combine.rds"))
+f_large_combine <- readr::read_rds(here("analysis/data/f_large_combine.rds"))
+
+#主成分分析
+pca_small_combine <- f_small_combine %>% PCA
+pca_large_combine <- f_large_combine %>% PCA
+
+#外れ値の特定
+which_out(pca_small_combine$x[,1],0.5)
+which_out(pca_large_combine$x[,1],0.5)
+
+#外れ値を赤くプロット
+cols_small_combine <- rep("black", nrow(pca_small_combine$x))
+outliers_small_combine <- which_out(pca_small_combine$x[, 1], conf = 0.5)
+cols_small_combine[outliers_small_combine] <- "red"
+plot(pca_small_combine, col=cols_small_combine)
+
+cols_large_combine <- rep("black", nrow(pca_large_combine$x))
+outliers_large_combine <- which_out(pca_large_combine$x[, 1], conf = 0.5)
+cols_large_combine[outliers_large_combine] <- "red"
+plot(pca_large_combine, col=cols_large_combine)
+
+#外れ値を除外し再度主成分分析を実施
+pca_small_combine2<-f_small_combine %>% slice(-outliers_small_combine) %>%PCA
+PCcontrib(pca_small_combine2,nax=1:3) 
+
+pca_large_combine2<-f_large_combine %>% slice(-outliers_large_combine) %>%PCA
+PCcontrib(pca_large_combine2,nax=1:3) 
+
+#変更を保存
+saveRDS(pca_small_combine2,here("analysis/data/pca_small_combine2.rds"))
+saveRDS(pca_large_combine2,here("analysis/data/pca_large_combine2.rds"))
+```
+
+
+## 分析結果の可視化
+```{r count-table-prepare}
+#分析対象となる個数を段階毎に算出
+library(dplyr)
+count_small <- f_small_combine$fac %>%
+  group_by(Phase) %>%
+  summarize(count = n()) %>%
+  rename_("小型品" = "count")
+
+count_large <-f_large_combine$fac %>%
+  group_by(Phase) %>%
+  summarize(count = n()) %>%
+  rename_("中大型品" = "count")
+
+count_small_outliers <- f_small_combine$fac %>%
+  slice(outliers_small_combine) %>%
+  group_by(Phase) %>%
+  summarize(count = n()) %>%
+  rename_("外れ値_小" = "count")
+
+count_large_outliers <- f_large_combine$fac %>%
+  slice(outliers_large_combine) %>%
+  group_by(Phase) %>%
+  summarize(count = n()) %>%
+  rename_("外れ値_大" = "count")
+
+count_small_join <- 
+  full_join(count_small,count_small_outliers,by = "Phase")
+count_large_join <- 
+  full_join(count_large,count_large_outliers,by = "Phase")
+count_join <- full_join(count_large_join,count_small_join,by = "Phase")
+# 上の_1と_2を逆にしても統合できるが。Phaseのlevelsを変える機能がうまく働かないので、上のようにし、列の語順を入れ替えることで対応した。
+count_join <- count_join[,c(1,4,5,2,3)]
+# NAを返す部分を0に置き換える
+count_join[is.na(count_join)] <- 0
+
+# 合計行を作成
+`Phase` <- "合計"
+`小型品` <- sum(count_join[,2])
+`外れ値_小` <- sum(count_join[,3])
+`中大型品` <- sum(count_join[,4])
+`外れ値_大`  <- sum(count_join[,5])
+count_sum <- data.frame(`Phase`,`小型品` ,`外れ値_小`,`中大型品`,`外れ値_大`)
+
+count_join_sum <- rbind(count_join,count_sum) #rbind;行の合成
+
+saveRDS(count_join_sum,here("analysis/data/count_join_sum.rds"))
+
+```
+
+```{r count-table}
+count_join_sum <- readr::read_rds(here("analysis/data/count_join_sum.rds"))
+knitr::kable(count_join_sum,caption = "分析に用いた各段階の個数（個）。外れ値はうち数")
+```
+
+```{r include=FALSE}
+##日本語フォントが必要な場合にpar(family = "IPAexGothic")を入力
+#第1・2主成分の結果を出力（小型品）
+png(here("analysis/figures/pca_small_combine.png"), res = 300, w = 2000, h = 1500)
+par(family = "IPAexGothic")
+plot(0)
+plot_PCA(pca_small_combine2,~Phase,
+         morphospace_position = "range",
+         axes = c(1,2),
+         points = FALSE, #layer_points()で指定するのでFALSE
+         chull = FALSE,
+         center_origin = FALSE,
+         labelpoints = FALSE, #TRUEにするとファイル名で表示する
+         palette = col_solarized)%>%
+  layer_points(cex=1, pch = as.integer(pca_small_combine2[["fac"]][["Phase"]]))%>%
+  layer_legend(cex =1/4,)%>%
+  layer_ellipses(conf=0.5,lwd=2)%>%
+  layer_labelgroups(cex=2/3)
+
+invisible(dev.off())
+
+#第1・3主成分の結果を出力（小型品）
+png(here("analysis/figures/pca_small_combine_2.png"), res = 300, w = 2000, h = 1500)
+par(family = "IPAexGothic")
+plot(0)
+plot_PCA(pca_small_combine2,~Phase,
+         morphospace_position = "range",
+         axes = c(1,3),
+         points = FALSE, #layer_points()で指定するのでFALSE
+         chull = FALSE,
+         center_origin = FALSE,
+         labelpoints = FALSE, #TRUEにするとファイル名で表示する
+         palette = col_solarized)%>%
+  layer_points(cex=1, pch = as.integer(pca_small_combine2[["fac"]][["Phase"]]))%>%
+  layer_legend(cex =1/4)%>%
+  layer_ellipses(conf=0.5,lwd=2)%>%
+  layer_labelgroups(cex=2/3)
+
+invisible(dev.off())
+
+#第1・2主成分の結果を出力（中大型品）
+png(here("analysis/figures/pca_large_combine.png"), res = 300, w = 2000, h = 1500)
+par(family = "IPAexGothic")
+plot(0)
+plot_PCA(pca_large_combine2,~Phase,
+         morphospace_position = "range",
+         axes = c(1,2),
+         points = FALSE, #layer_points()で指定するのでFALSE
+         chull = FALSE,
+         center_origin = FALSE,
+         labelpoints = FALSE, #TRUEにするとファイル名で表示する
+         palette = col_solarized)%>%
+  layer_points(cex=1, pch = as.integer(pca_large_combine2[["fac"]][["Phase"]]))%>%
+  layer_legend(cex =2)%>%
+  layer_ellipses(conf=0.5,lwd=2)%>%
+  layer_labelgroups(cex=2/3)
+
+invisible(dev.off())
+
+#第1・3主成分の結果を出力（中大型品）
+png(here("analysis/figures/pca_large_combine_2.png"), res = 300, w = 2000, h = 1500)
+par(family = "IPAexGothic")
+plot(0)
+plot_PCA(pca_large_combine2,~Phase,
+         morphospace_position = "range",
+         axes = c(1,3),
+         points = FALSE, #layer_points()で指定するのでFALSE
+         chull = FALSE,
+         center_origin = FALSE,
+         labelpoints = FALSE, #TRUEにするとファイル名で表示する
+         palette = col_solarized)%>%
+  layer_points(cex=1, pch = as.integer(pca_large_combine2[["fac"]][["Phase"]]))%>%
+  layer_legend(cex =2)%>%
+  layer_ellipses(conf=0.5,lwd=2)%>%
+  layer_labelgroups(cex=2/3)
+
+invisible(dev.off())
+```
+
+```{r include=FALSE}
+#MeanShapeの可視化
+#Momocs::MSHAPESを使って、楕円フーリエ解析の結果から平均的な形を分析
+meanshapes_small <- f_small_combine %>% MSHAPES(~Phase)
+meanshapes_large <- f_large_combine %>% MSHAPES(~Phase)
+
+#各段階毎にmeanshapeを作成する。
+##small
+data.frame(table(f_small_combine[["fac"]]["Phase"]))
+mshp_small <- meanshapes_small$shp
+`Toyama1_small` <- mshp_small[["富山1段階"]]
+`Toyama2_small` <- mshp_small[["富山2段階"]]
+`Toyama3_small` <- mshp_small[["富山3段階"]]
+`Toyama4_small` <- mshp_small[["富山4段階"]]
+`Kyoto9B_small`<- mshp_small[["京都9B段階"]]
+`Kyoto9C_small`<- mshp_small[["京都9C段階"]]
+`Kyoto10A_small`<- mshp_small[["京都10A段階"]]
+`Kyoto10B_small`<- mshp_small[["京都10B段階"]]
+
+##large
+data.frame(table(f_large_combine[["fac"]]["Phase"]))
+mshp_large <- meanshapes_large$shp 
+`Toyama1_large` <- mshp_large[["富山1段階"]]
+`Toyama2_large` <- mshp_large[["富山2段階"]]
+`Toyama3_large` <- mshp_large[["富山3段階"]]
+`Toyama4_large` <- mshp_large[["富山4段階"]]
+`Kyoto9B_large`<- mshp_large[["京都9B段階"]]
+`Kyoto9C_large`<- mshp_large[["京都9C段階"]]
+`Kyoto10A_large`<- mshp_large[["京都10A段階"]]
+`Kyoto10B_large`<- mshp_large[["京都10B段階"]]
+
+#Thin plate spline analysis(TPS)
+##作図その1
+png(here("analysis/figures/tps1_1.png"), res = 300, w = 1000, h = 1300)
+par(family = "IPAexGothic")
+par(mfrow=c(2,1)) # 図の形を決める
+tps_grid(Kyoto9B_small,Toyama1_small,
+         shp.lwd = c(2,2),
+         shp.border = c("red","blue"),
+         amp = 1,grid.size = 18,
+         legend.text = c("京都9B段階（小）","富山1段階（小）"))
+
+tps_grid(Kyoto9C_small,Toyama1_small,
+         shp.lwd = c(2,2),
+         shp.border = c("red","blue"),
+         amp = 1,grid.size = 18,
+         legend.text = c("京都9C段階（小）","富山1段階（小）"))
+
+invisible(dev.off())
+
+png(here("analysis/figures/tps1_2.png"), res = 300, w = 1000, h = 1300)
+par(family = "IPAexGothic")
+par(mfrow=c(2,1)) # 図の形を決める
+tps_grid(Kyoto10A_small,Toyama2_small,
+         shp.lwd = c(2,2),
+         shp.border = c("red","blue"),
+         amp = 1,grid.size = 18,
+         legend.text = c("京都10A段階（小）","富山2段階（小）"))
+
+tps_grid(Kyoto10B_small,Toyama4_small,
+         shp.lwd = c(2,2),
+         shp.border = c("red","blue"),
+         amp = 1,grid.size = 18,
+         legend.text = c("京都10B段階（小）","富山4段階（小）"))
+
+invisible(dev.off())
+
+##作図その2
+png(here("analysis/figures/tps2_1.png"), res = 300, w = 1000, h = 1300)
+par(family = "IPAexGothic")
+par(mfrow=c(2,1)) # 図の形を決める
+tps_grid(Kyoto9B_large,Toyama1_large,
+         shp.lwd = c(2,2),
+         shp.border = c("red","blue"),
+         amp = 1,grid.size = 18,
+         legend.text = c("京都9B段階（大）","富山1段階（大）"))
+
+tps_grid(Kyoto9C_large,Toyama1_large,
+         shp.lwd = c(2,2),
+         shp.border = c("red","blue"),
+         amp = 1,grid.size = 18,
+         legend.text = c("京都9C段階（大）","富山1段階（大）"))
+
+invisible(dev.off())
+
+png(here("analysis/figures/tps2_2.png"), res = 300, w = 1000, h = 1300)
+par(family = "IPAexGothic")
+par(mfrow=c(2,1)) # 図の形を決める
+tps_grid(Kyoto10A_large,Toyama2_large,
+         shp.lwd = c(2,2),
+         shp.border = c("red","blue"),
+         amp = 1,grid.size = 18,
+         legend.text = c("京都10A段階（大）","富山2段階（大）"))
+
+tps_grid(Kyoto10B_large,Toyama4_large,
+         shp.lwd = c(2,2),
+         shp.border = c("red","blue"),
+         amp = 1,grid.size = 18,
+         legend.text = c("京都10B段階（大）","富山4段階（大）"))
+
+invisible(dev.off())
+```
+
+```{r include=FALSE}
+library(magick)
+tps_plot1_1 <- image_read(here("analysis/figures/tps1_1.png"))
+tps_plot1_2 <- image_read(here("analysis/figures/tps1_2.png"))
+tps_plot2_1 <- image_read(here("analysis/figures/tps2_1.png"))
+tps_plot2_2 <- image_read(here("analysis/figures/tps2_2.png"))
+
+pca_plot1_1 <- image_read(here("analysis/figures/pca_small_combine.png"))
+pca_plot1_2 <- image_read(here("analysis/figures/pca_small_combine_2.png"))
+pca_plot2_1 <- image_read(here("analysis/figures/pca_large_combine.png"))
+pca_plot2_2 <- image_read(here("analysis/figures/pca_large_combine_2.png"))
+
+img1_1 <- image_scale(c(pca_plot1_1,pca_plot1_2),"x1000")
+img1_2 <- image_scale(c(tps_plot1_1,tps_plot1_2),"x1000")
+pca_plot_append1_1 <- image_append(img1_1,stack = TRUE)
+pca_plot_append1_2 <- image_append(img1_2,stack = TRUE)
+
+image_scale(c(pca_plot_append1_2,pca_plot_append1_1),"x1000")%>%
+  image_append(stack = FALSE)%>%
+  image_write(here("analysis/figures/tps_pca_plot_append1.png"))
+
+img2_1 <- image_scale(c(pca_plot2_1,pca_plot2_2) ,"x1000")
+img2_2 <- image_scale(c(tps_plot2_1,tps_plot2_2) ,"x1000")
+pca_plot_append2_1 <- image_append(img2_1,stack = TRUE)
+pca_plot_append2_2 <- image_append(img2_2,stack = TRUE)
+
+image_scale(c(pca_plot_append2_2,pca_plot_append2_1),"x1000")%>%
+  image_append(stack = FALSE)%>%
+  image_write(here("analysis/figures/tps_pca_plot_append2.png"))
+```
+
+```{r TPS-PCA-Small, echo=FALSE, fig.cap='小型品の分析。左：薄板スプライン法（Thin Plate Splines）を使用した富山・京都の土師器皿の平均的な形の比較。右：主成分分析結果をプロットした各段階の分布を比較'}
+knitr::include_graphics(here("analysis/figures/tps_pca_plot_append1.png"))
+```
+
+```{r TPS-PCA-Large, echo=FALSE,  fig.cap='中大型品の分析。左：薄板スプライン法（Thin Plate Splines）を使用した富山・京都の平均的な形の比較。右：主成分分析結果をプロットした各段階の分布を比較'}
+knitr::include_graphics(here("analysis/figures/tps_pca_plot_append2.png"))
+```
+
+```{r include=FALSE}
+#主成分得点を計算
+##small
+Cumulative_Proportion_small <- 
+  summary(pca_small_combine2)$importance %>% 
+  as.data.frame %>% mutate_if(is.numeric, round, 4)
+Cumulative_Proportion_small <- as.data.frame(t(Cumulative_Proportion_small))
+Cumulative_Proportion_small <- Cumulative_Proportion_small %>% 
+  mutate(寄与率 = paste(Cumulative_Proportion_small[,2]*100))
+
+##large
+Cumulative_Proportion_large <- 
+  summary(pca_large_combine2)$importance %>% 
+  as.data.frame %>% mutate_if(is.numeric, round, 4)
+Cumulative_Proportion_large <- as.data.frame(t(Cumulative_Proportion_large))
+Cumulative_Proportion_large <- Cumulative_Proportion_large %>% 
+  mutate(寄与率 = paste(Cumulative_Proportion_large[,2]*100))
+
+```
+
+## 京都産土師器皿の変遷（本文には関係ない）
+```{r}
+shape_all_combine_test <- readr::read_rds(here("analysis/data/shape_all_combine.rds")) %>%
+  filter(Prefecture=="Kyoto")
+
+library(Momocs)
+
+shape_all_combine_test$fac <-
+  shape_all_combine_test$fac %>%
+  dplyr::mutate(Phase2 = case_when(
+    str_detect(remains,"SE0922")~"SE0922(9C)",
+    str_detect(remains,"SK2185")~"SK2185(10A)",
+    str_detect(remains,"土壙170")~"土壙170(9B)",
+    str_detect(remains,"SK415")~"SK415(9C)",
+    str_detect(remains,"土坑170")~"土坑170(9C)",
+    str_detect(remains,"SK499")~"SK499(10A)",
+    str_detect(remains,"SD166上層")~"SD166上層(10B)",
+    str_detect(remains,"土坑2134")~"土坑2134(10A)",
+    str_detect(remains,"SK0366")~"SK0366(9B)",
+    str_detect(remains,"SK769")~"SK769(9B)",
+    str_detect(remains,"SK145")~"SK145(9B)",
+    str_detect(remains,"SK144B")~"SK144B(10A)",
+    str_detect(remains,"SK8-18")~"SK8-18(10B)",
+    str_detect(remains,"溝5下層")~"溝5下層(10B)",))
+
+#京都の小型品
+shape_small_combine_test <-
+  shape_all_combine_test %>%
+  Momocs::filter(rim_diameter <= 10.5)
+
+#京都の中大型品
+shape_large_combine_test <-
+  shape_all_combine_test %>%
+  Momocs::filter(rim_diameter > 10.5)
+
+
+#calibrate_harmonicpower_efourier(shape_small_combine_test,nb.h=30)
+#calibrate_harmonicpower_efourier(shape_large_combine_test,nb.h=30)
+
+f_small_combine_test <- efourier(shape_small_combine_test,nb.h=17,norm=FALSE) 
+f_large_combine_test <- efourier(shape_large_combine_test,nb.h=17,norm=FALSE) 
+
+pca_small_combine_test <- f_small_combine_test %>% PCA
+pca_large_combine_test <- f_large_combine_test %>% PCA
+
+#外れ値の特定
+which_out(pca_small_combine_test$x[,1],0.5)
+which_out(pca_large_combine_test$x[,1],0.5)
+
+#外れ値を赤くプロット
+cols_small_combine_test <- rep("black", nrow(pca_small_combine_test$x))
+outliers_small_combine_test <- which_out(pca_small_combine_test$x[, 1], conf = 0.5)
+cols_small_combine_test[outliers_small_combine_test] <- "red"
+plot(pca_small_combine_test, col=cols_small_combine_test)
+
+cols_large_combine_test <- rep("black", nrow(pca_large_combine_test$x))
+outliers_large_combine_test <- which_out(pca_large_combine_test$x[, 1], conf = 0.5)
+cols_large_combine_test[outliers_large_combine_test] <- "red"
+plot(pca_large_combine_test, col=cols_large_combine_test)
+
+#外れ値を除外し再度主成分分析を実施
+pca_small_combine_test2<-f_small_combine_test %>% 
+  slice(-outliers_small_combine_test) %>%
+  Momocs::filter(remains %in%  c("土壙170","土坑170","土坑2134","SD166上層")) %>%
+  PCA
+PCcontrib(pca_small_combine_test2,nax=1:3) 
+
+pca_large_combine_test2<-f_large_combine_test %>%
+  slice(-outliers_large_combine_test) %>%
+  Momocs::filter(remains %in%  c("土壙170","土坑170","土坑2134","SD166上層")) %>%
+  PCA
+PCcontrib(pca_large_combine_test2,nax=1:3) 
+
+#plot
+par(family = "IPAexGothic")
+plot(0)
+plot_PCA(pca_small_combine_test2,~Phase2,
+         morphospace_position = "range",
+         axes = c(1,2),
+         points = TRUE, #layer_points()で指定するのでFALSE
+         chull = FALSE,
+         center_origin = FALSE,
+         labelpoints = FALSE, #TRUEにするとファイル名で表示する
+         palette = col_solarized)%>%
+  layer_legend(cex =1/4,)%>%
+  layer_ellipses(conf=0.5,lwd=2)%>%
+  layer_labelgroups(cex=2/3)
+
+par(family = "IPAexGothic")
+plot(0)
+plot_PCA(pca_large_combine_test2,~Phase2,
+         morphospace_position = "range",
+         axes = c(1,2),
+         points = TRUE, #layer_points()で指定するのでFALSE
+         chull = FALSE,
+         center_origin = FALSE,
+         labelpoints = FALSE, #TRUEにするとファイル名で表示する
+         palette = col_solarized)%>%
+  layer_legend(cex =1/4,)%>%
+  layer_ellipses(conf=0.5,lwd=2)%>%
+  layer_labelgroups(cex=2/3)
+```
+
+
+
+# 統計解析
+
+## 主成分の変動係数（CV）
+
+```{r}
+#Rスクリプトを読み取り（詳細は下記Rscript,prepare.Rmdを参照）
+source("analysis/data/pcs_cv_violin.R")
+```
+
+```{r eval=FALSE, include=FALSE}
+#Rscriptには以下のコードが書かれています。
+
+library(tidyverse)
+library(readr)
+
+pca_small_combine2 <- readr::read_rds(here("analysis/data/pca_small_combine2.rds"))
+pca_large_combine2 <- readr::read_rds(here("analysis/data/pca_large_combine2.rds"))
+
+#変動係数CVはすべての正またはすべての負でいずれかの数値で計算された場合に最も情報量が多いことから、PCスコアを1から10の範囲に正規化する。
+pca_small_combine2_tmp <-
+  pca_small_combine2$x %>%
+  as_tibble() %>%
+  mutate_all(~scales::rescale(., to = c(1, 10))) %>%
+  as.matrix() 
+
+pca_large_combine2_tmp <- 
+  pca_large_combine2$x %>% 
+  as_tibble() %>% 
+  mutate_all(~scales::rescale(., to = c(1, 10))) %>%
+  as.matrix() 
+
+row.names(pca_small_combine2_tmp) <- row.names(pca_small_combine2$x )
+row.names(pca_large_combine2_tmp) <- row.names(pca_large_combine2$x )
+
+#念のためコピーしたもので計算
+pca_small_combine3 <- pca_small_combine2
+pca_small_combine3$x <- pca_small_combine2_tmp
+
+pca_large_combine3 <- pca_large_combine2
+pca_large_combine3$x <- pca_large_combine2_tmp
+
+# データがいくつあるか確認
+len_small <- length(pca_small_combine3$x[,1])
+len_large <- length(pca_large_combine3$x[,1])
+
+# 第1〜第3主成分を時代毎に抽出
+pc_plot_small <- tibble(pc = c(pca_small_combine3$x[,1],
+                                pca_small_combine3$x[,2],
+                                pca_small_combine3$x[,3]),
+                         Phase= rep(pca_small_combine3$fac$Phase, 3),
+                         pcn = as.character(str_glue(
+                           'PC{sort(rep(1:3, len_small))}')))
+
+pc_plot_large <- tibble(pc = c(pca_large_combine3$x[,1],
+                                pca_large_combine3$x[,2],
+                                pca_large_combine3$x[,3]),
+                         Phase= rep(pca_large_combine3$fac$Phase, 3),
+                         pcn = as.character(str_glue(
+                           'PC{sort(rep(1:3, len_large))}')))
+
+# 変動係数CVを計算し一覧表にする。
+##group_by()でグループ化する 
+##raster::cv();変動係数を計算する関数
+##tidyr::pivot_wider();縦長(long-format)から幅広(wide-format)に変形する関数。names_fromで新しく列名になる列、values_fromで動かしたい値が入っている列を設定する。
+pc_cv_table <- pc_plot_small %>%
+  group_by(Phase, pcn) %>%
+  summarise(cvs = raster::cv(pc)) %>% 
+  pivot_wider(names_from = pcn, values_from = cvs) 
+
+pc_cv_table_2 <- pc_plot_large %>% 
+  group_by(Phase, pcn) %>% 
+  summarise(cvs = raster::cv(pc)) %>% 
+  pivot_wider(names_from = pcn, values_from = cvs)
+
+# pc_plotを横幅の表に変換
+pc_all_wide_small  <- pc_plot_small %>%
+  group_by(pcn) %>% 
+  mutate(row = row_number()) %>%
+  pivot_wider(names_from = pcn, 
+              values_from = pc) %>% 
+  select(-row)
+
+pc_all_wide_large  <- pc_plot_large %>% 
+  group_by(pcn) %>% 
+  mutate(row = row_number()) %>%
+  pivot_wider(names_from = pcn, 
+              values_from = pc) %>% 
+  select(-row)
+
+# 各段階の主成分毎に変動係数CVを計算
+##変動係数CV=標準偏差SD / 平均mean で求められる。
+##mutate;この場合新しい列を作成している。
+##dplyr::distinct();重複した行を削除する関数。
+cv_pcs_all_small <-
+  pc_all_wide_small %>%
+  group_by(Phase) %>%
+  mutate(cv_pc1 = round(sd(PC1)/ mean(PC1), digits = 2)*100,
+         cv_pc2 = round(sd(PC2)/ mean(PC2), digits = 2)*100,
+         cv_pc3 = round(sd(PC3)/ mean(PC3), digits = 2)*100)%>% 
+  mutate(mean_pc1 = mean(PC1),
+         mean_pc2 = mean(PC2),
+         mean_pc3 = mean(PC3)) %>% 
+  distinct(cv_pc1, cv_pc2, cv_pc3, mean_pc1, mean_pc2, mean_pc3)
+
+cv_pcs_all_large <-
+  pc_all_wide_large %>% 
+  group_by(Phase) %>%
+  mutate(cv_pc1 = round(sd(PC1)/ mean(PC1), digits = 2)*100,
+         cv_pc2 = round(sd(PC2)/ mean(PC2), digits = 2)*100,
+         cv_pc3 = round(sd(PC3)/ mean(PC3), digits = 2)*100)%>% 
+  mutate(mean_pc1 = mean(PC1),
+         mean_pc2 = mean(PC2),
+         mean_pc3 = mean(PC3)) %>% 
+  distinct(cv_pc1, cv_pc2, cv_pc3, mean_pc1, mean_pc2, mean_pc3)
+
+# CVのラベルを作成（cv_labelというデータフレームを作成した後ベクトルにしている）
+cv_label_small <- cv_pcs_all_small %>% 
+  mutate(cv_pc1 = paste("CV = ", cv_pc1, "%"),
+         cv_pc2 = paste("CV = ", cv_pc2, "%"),
+         cv_pc3 = paste("CV = ", cv_pc3, "%"))
+cv_label_small <- c(cv_label_small$cv_pc1, cv_label_small$cv_pc2, cv_label_small$cv_pc3) 
+
+cv_label_large <- cv_pcs_all_large %>% 
+  mutate(cv_pc1 = paste("CV = ", cv_pc1, "%"),
+         cv_pc2 = paste("CV = ", cv_pc2, "%"),
+         cv_pc3 = paste("CV = ", cv_pc3, "%"))
+cv_label_large <- c(cv_label_large$cv_pc1, cv_label_large$cv_pc2, cv_label_large$cv_pc3) 
+
+# 各段階の主成分スコアをプロットし、得られたCVの結果を貼り付ける。
+# プロットの各段階とラベルの順番がズレている点に注意。
+ggplot(pc_plot_small,aes(Phase,pc)) +
+  geom_violin() + 
+  ggforce::geom_sina() +
+  xlab("") +
+  facet_wrap(~ pcn, ncol = 1) +
+  geom_text(data = cv_pcs_all_small,
+            mapping = aes(x = c(1.0, 2.0, 3.0, 4.0, 6.1, 7.2, 8.125, 5.0, 
+                                1.1, 2.0, 3.0, 4.0, 6.1, 7.0, 8.0, 5.1, 
+                                1.0, 2.0, 3.0, 4.0, 6.1, 7.0, 8.0, 5.0), 
+                          y = 9.0, 
+                          label = cv_label_small),
+            size = 2.5,
+            color= "red",
+            hjust = -0.1,
+            vjust= -1)+
+  theme_minimal(base_family = "IPAexGothic")
+
+ggsave(here("analysis/figures/PCs_CV_small.jpg"),
+       h = 5, w = 10)
+
+ggplot(pc_plot_large, aes(Phase, pc)) +
+  geom_violin() + 
+  ggforce::geom_sina() +
+  xlab("") +
+  facet_wrap(~ pcn, ncol = 1) +
+  geom_text(data = cv_pcs_all_large,
+            mapping = aes(x = c(1.0, 2.0, 3.0, 4.0, 7.1, 6.0, 5.1, 8.0,  
+                                1.0, 2.1, 3.1, 4.0, 7.1, 6.0, 5.0, 8.1, 
+                                1.0, 2.0, 3.1, 4.0, 7.1, 6.0, 5.1, 8.0), 
+                          y = 9.0, 
+                          label = cv_label_large),
+            size = 2.5,
+            color= "red",
+            hjust = -0.1,
+            vjust= -1)+
+  theme_minimal(base_family = "IPAexGothic")
+
+ggsave(here("analysis/figures/PCs_CV_large.jpg"),
+       h = 5, w = 10)
+```
+
+```{r PCs-CV-Small, echo=FALSE, fig.cap='小型品の各段階の主成分スコアと変動係数CV(%)'}
+knitr::include_graphics(here("analysis/figures/PCs_CV_small.jpg"))
+```
+
+```{r PCs-CV-Large, echo=FALSE, fig.cap='中大型品の各段階の主成分スコアと変動係数CV(%)'}
+knitr::include_graphics(here("analysis/figures/PCs_CV_large.jpg"))
+```
+
+## 多変量分散分析
+
+```{r MANOVA-table-prepare, include=FALSE}
+# MANOVA: Multivariate Analysis of (co)variace　多変量分散分析
+# 主成分のスコアの分布に差があるかどうかは、各段階の組み合わせを計算することで検定できる。
+# momocs:::MANOVA_PW()
+
+options(scipen = 4) #指数表示を数値にする魔法の言葉...。
+
+manv_small <- rrtools:::quietly ( MANOVA_PW(pca_small_combine2, "Phase") ) 
+summary_manv_small <- as.data.frame(manv_small$summary) %>% 
+  rownames_to_column() #データフレームのrownamesを普通のcolumnに変換する。
+
+summary_manv_small_tab <- 
+  summary_manv_small %>% 
+  mutate_if(is.numeric, round, 4) %>%       #数値データの場合は丸める。
+  select(-Df, -`num Df`) %>%                #書かれた列を削除する。
+  rename(Comparison = rowname,              #文字通り列名をリネームする
+         `Pillai's trace` = Pillai,
+         `Approximate F value` = `approx F`,
+         `degrees of freedom` = `den Df`)
+summary_manv_small_tab <- summary_manv_small_tab[c(-6:-7,-10:-11,-15:-16,-19:-20,-23:-28),]
+
+
+manv_large <- rrtools:::quietly ( MANOVA_PW(pca_large_combine2, "Phase") ) 
+summary_manv_large <- as.data.frame(manv_large$summary) %>% 
+  rownames_to_column() #データフレームのrownamesを普通のcolumnに変換する。
+
+summary_manv_large_tab <- 
+  summary_manv_large %>% 
+  mutate_if(is.numeric, round, 4) %>%       #数値データの場合は丸める。
+  select(-Df, -`num Df`) %>%                #書かれた列を削除する。
+  rename(Comparison = rowname,              #文字通り列名をリネームする
+         `Pillai's trace` = Pillai,
+         `Approximate F value` = `approx F`,
+         `degrees of freedom` = `den Df`)
+summary_manv_large_tab <- summary_manv_large_tab[c(-6:-7,-10:-11,-15:-16,-19:-20,-23:-28),]
+
+#保存
+saveRDS(summary_manv_small_tab,here("analysis/data/summary_manv_small_tab.rds"))
+saveRDS(summary_manv_large_tab,here("analysis/data/summary_manv_large_tab.rds"))
+```
+
+```{r MANOVA-table-small}
+summary_manv_small_tab <- readr::read_rds(here("analysis/data/summary_manv_small_tab.rds"))
+knitr::kable(summary_manv_small_tab, row.names = FALSE, caption = "小型品の主成分スコアにおける多変量分散分析（MANOVA）の概要。Pillai’s traceはMANOVAによって生成される統計量で、1に近いほど、独立変数が従属変数の値に統計的に有意な効果を持つという。Approximate F valueはF値、degrees of freedomは自由度、Pr(>F)はF値をｐ値に置き換えたものである（有意水準５％）。")
+```
+
+```{r MANOVA-table-large}
+summary_manv_large_tab <- readr::read_rds(here("analysis/data/summary_manv_large_tab.rds"))
+knitr::kable(summary_manv_large_tab, row.names = FALSE, caption = "中大型品の主成分スコアにおける多変量分散分析（MANOVA）の概要")
+```
+
+# 口径の変動係数と散布図
+
+```{r}
+#以下のソースには下記のチャンクのデータが入っています。
+source("analysis/data/pcs_cv_boxplot.R")
+```
+
+```{r echo=FALSE}
+#small
+pc1_small <- data.frame(x = pca_small_combine3$x[,1],
+                        y = as.character(pca_small_combine3$fac$Phase),
+                        stringsAsFactors = F)
+
+pc2_small <- data.frame(x = pca_small_combine3$x[,2],
+                        y = as.character(pca_small_combine3$fac$Phase),
+                        stringsAsFactors = F)
+
+pc3_small <- data.frame(x = pca_small_combine3$x[,3],
+                        y = as.character(pca_small_combine3$fac$Phase),
+                        stringsAsFactors = F)
+
+#large
+pc1_large <- data.frame(x = pca_large_combine3$x[,1],
+                        y = as.character(pca_large_combine3$fac$Phase),
+                        stringsAsFactors = F)
+
+pc2_large <- data.frame(x = pca_large_combine3$x[,2],
+                        y = as.character(pca_large_combine3$fac$Phase),
+                        stringsAsFactors = F)
+
+pc3_large <- data.frame(x = pca_large_combine3$x[,3],
+                        y = as.character(pca_large_combine3$fac$Phase),
+                        stringsAsFactors = F)
+```
+
+```{r echo=FALSE}
+#データフレームに主成分スコアを追加する工程
+library(ggpubr)
+library(dplyr)
+
+pca_small_combine2 <- readr::read_rds(here("analysis/data/pca_small_combine2.rds"))
+pca_large_combine2 <- readr::read_rds(here("analysis/data/pca_large_combine2.rds"))
+
+##bind_cols;列の左側に列を追加する関数
+#dplyr::full_join;指定した列名でデータフレームを結合
+#dplyr::anti_join(x,y,by=~);yとマッチしなかったxの行を返します。
+
+#データの読み込み
+size_df_small <- pca_small_combine2$fac
+size_df_large <- pca_large_combine2$fac
+
+#主成分スコアをデータフレームに結合
+##small
+pc1_filename_small <- 
+  bind_cols(File_name = rownames(pc1_small), pc1_small) %>% 
+  rename(c("pc1" = "x")) 
+
+pc2_filename_small <- 
+  bind_cols(File_name = rownames(pc2_small), pc2_small) %>% 
+  rename(c("pc2" = "x")) 
+
+pc3_filename_small <- 
+  bind_cols(File_name = rownames(pc3_small), pc3_small) %>% 
+  rename(c("pc3" = "x")) 
+
+size_pcs_df_small <-
+  size_df_small %>% 
+  left_join(pc1_filename_small) %>% 
+  left_join(pc2_filename_small) %>%
+  left_join(pc3_filename_small) %>%
+  select(-y)
+
+##large
+pc1_filename_large <- 
+  bind_cols(File_name = rownames(pc1_large), pc1_large) %>% 
+  rename(c("pc1" = "x"))
+
+pc2_filename_large <- 
+  bind_cols(File_name = rownames(pc2_large), pc2_large) %>% 
+  rename(c("pc2" = "x"))
+
+pc3_filename_large <- 
+  bind_cols(File_name = rownames(pc3_large), pc3_large) %>% 
+  rename(c("pc3" = "x"))
+
+size_pcs_df_large <-
+  size_df_large %>% 
+  left_join(pc1_filename_large) %>% 
+  left_join(pc2_filename_large) %>%
+  left_join(pc3_filename_large) %>%
+  select(-y)
+```
+
+```{r echo=FALSE}
+#cvの情報を統合する
+#dplyr::group_by;ある変数の値でデータセットをグループ化して、グループ単位で処理を行えるようにする。
+#raster::cv;変動係数を計算する関数
+
+size_pcs_cv_small <-
+  size_pcs_df_small %>% 
+  group_by(Phase) %>% 
+  mutate(cv_rim_diameter = round(raster::cv(rim_diameter), 2),
+         cv_hight = round(raster::cv(hight), 2),
+         rim_diameter_mean = round(mean(rim_diameter), 2)) %>% 
+  mutate(Phase = as.factor(Phase)) %>% 
+  left_join(cv_pcs_all_small)
+
+###large
+size_pcs_cv_large <-
+  size_pcs_df_large %>% 
+  group_by(Phase) %>% 
+  mutate(cv_rim_diameter = round(raster::cv(rim_diameter), 2),
+         cv_hight = round(raster::cv(hight), 2),
+         rim_diameter_mean = round(mean(rim_diameter), 2)) %>% 
+  mutate(Phase = as.factor(Phase)) %>% 
+  left_join(cv_pcs_all_large)
+```
+
+```{r echo=FALSE}
+# データフレームを作成し、ラベルを作成
+size_cv_df_small <-
+  size_pcs_cv_small %>%
+  #重複する行を削除する
+  distinct(Phase, rim_diameter_mean, cv_rim_diameter, cv_pc1) %>% 
+  mutate(cv_rim_diameter_label = paste("CV =", cv_rim_diameter, "%"),
+         rim_diameter_mean_label = paste("MV=", rim_diameter_mean,"cm"))
+
+cv_diameter_label_small <- size_cv_df_small$cv_rim_diameter_label
+rim_diameter_mean_label_small <- size_cv_df_small$rim_diameter_mean
+rim_diameter_mean_label_small_2 <- size_cv_df_small$rim_diameter_mean_label
+
+size_cv_df_large <-
+  size_pcs_cv_large %>% 
+  #重複する行を削除する
+  distinct(Phase, rim_diameter_mean, cv_rim_diameter, cv_pc1) %>% 
+  mutate(cv_rim_diameter_label = paste("CV =", cv_rim_diameter, "%"),
+         rim_diameter_mean_label = paste("MV=", rim_diameter_mean,"cm"))
+
+cv_diameter_label_large <- size_cv_df_large$cv_rim_diameter_label
+rim_diameter_mean_label_large <- size_cv_df_large$rim_diameter_mean
+rim_diameter_mean_label_large_2  <- size_cv_df_large$rim_diameter_mean_label
+
+#箱髭図で各段階毎の口径を比較
+#ラベルの位置がズレているので注意（size_cv_df_を確認しながら修正）
+#\nで改行
+##small
+boxplot_small <-
+  ggplot(size_pcs_df_small,
+         aes(rim_diameter, Phase)) +
+  geom_boxplot() +
+  coord_flip() +
+  labs(x = "rim diameter\n(cm)", y = "") +
+  annotate("text",
+           x = c(8.0, 7.8, 7.6, 7.6, 8.0, 6.9, 8.0, 7.8), 
+           y = c(1.0, 2.0, 3.0, 4.0, 6.0, 7.0, 8.0, 5.0),
+           size = 1.5, label = cv_diameter_label_small) + #annotate;注釈を追加する
+  annotate("text",
+           x = c(7.8, 7.6, 7.4, 7.4, 7.8, 6.7, 7.8, 7.6), 
+           y = c(1.0, 2.0, 3.0, 4.0, 6.0, 7.0, 8.0, 5.0),
+           size = 1.5, label = rim_diameter_mean_label_small_2) +
+  theme_minimal(base_family = "IPAexGothic")+
+  ###x軸,y軸の文字の大きさをx倍にする
+  theme(axis.text.x = element_text(size = rel(0.5),angle = 10),
+        axis.text.y = element_text(size = rel(0.9))) 
+
+##large
+boxplot_large <-
+  ggplot(size_pcs_df_large,
+         aes(rim_diameter, Phase)) +
+  geom_boxplot() +
+  coord_flip() +
+  labs(x = "rim diameter\n(cm)", y = "") +
+  annotate("text", 
+           x = c(16.7,10.5,10.5,16.2,10.4,11.0,11.1,10.4), 
+           y = c(1.0, 2.0, 3.0, 4.0, 7.0, 6.0, 5.0, 8.0),
+           size = 1.3, label = cv_diameter_label_large) +
+  annotate("text", 
+           x = c(16.4,10.2,10.2,15.9,10.1,10.7,10.8,10.1), 
+           y = c(1.0, 2.0, 3.0, 4.0, 7.0, 6.0, 5.0, 8.0),
+           size = 1.3, label = rim_diameter_mean_label_large_2) +
+  theme_minimal(base_family = "IPAexGothic")+
+  ###x軸,y軸の文字の大きさをx倍にする
+  theme(axis.text.x = element_text(size = rel(0.5),angle = 10),
+        axis.text.y = element_text(size = rel(0.9))) 
+```
+
+```{r}
+#散布図を描写
+library(ggrepel)
+#geom_point();散布図を作成する
+#プロット領域に日本語を打ち込む場合は、geom_text_repel()でフォントを決めなければならない
+##small
+scatterplot_small <-
+  size_cv_df_small %>% 
+  ggplot(aes(cv_rim_diameter, cv_pc1)) +
+  geom_point() +
+  geom_text_repel(label = size_cv_df_small$Phase, 
+                  size = 1.5,
+                  family = "IPAexGothic") + 
+  labs(x = "CV of rim diameter (%)",
+       y = "CV of PC1\n(%)") +
+  theme(legend.position = "none") +
+  theme_minimal(base_family = "IPAexGothic")+
+  #x軸,y軸の文字の大きさを0.9倍にする
+  theme(axis.text.x = element_text(size = rel(0.9)),
+        axis.text.y = element_text(size = rel(0.9)))
+
+##large
+scatterplot_large <-
+  size_cv_df_large %>% 
+  ggplot(aes(cv_rim_diameter, cv_pc1)) +
+  geom_point() +
+  geom_text_repel(label = size_cv_df_large$Phase, 
+                  size = 1.5,
+                  family = "IPAexGothic") + 
+  labs(x = "CV of rim diameter (%)",
+       y = "CV of PC1\n(%)") +
+  theme(legend.position = "none") +
+  theme_minimal(base_family = "IPAexGothic")+
+  #x軸,y軸の文字の大きさを0.9倍にする
+  theme(axis.text.x = element_text(size = rel(0.9)),
+        axis.text.y = element_text(size = rel(0.9)))
+```
+
+```{r echo=FALSE}
+#作成した図をまとめる
+par(family = "IPAexGothic")
+
+library(cowplot)
+boxplot_scatterplot_small_large <-
+  plot_grid(scatterplot_small,boxplot_small,
+            scatterplot_large,boxplot_large,
+            labels="AUTO",
+            rel_widths = c(1,2,1,2),
+            ncol=2)
+
+ggsave(plot=boxplot_scatterplot_small_large,
+       here("analysis", "figures","boxplot_scatterplot_small_large.jpg"),
+       width = 180, height = 100, dpi = 300,
+       units = "mm")
+```
+
+```{r df-cv-pcs-byplot-boxplot, echo=FALSE, fig.cap='A:土師器皿（小型品）の第一主成分と口径の変動係数。B:土師器皿（小型品）の段階毎の口径分布。C:土師器皿（中大型品）の第一主成分と口径分布。D:土師器皿（中大型品）の段階毎の口径分布とその変動係数。CVとMVはそれぞれ変動係数と平均、箱ひげ図の上下の点は「外れ値」を示す。分析した対象は楕円フーリエ解析を行ったものと同一で、報告書に掲載されている資料すべてを対象にしたものでない点に留意が必要。'}
+knitr::include_graphics(here("analysis/figures/boxplot_scatterplot_small_large.jpg"))
+```
+
+## 口径とPCの関係の散布図
+```{r}
+library("dplyr")
+library("tidyverse")
+library("ggpubr")
+
+#small
+pc1_size_scatterplot_small <- 
+  ggscatter(size_pcs_cv_small, 
+            x = "rim_diameter", 
+            y = "pc1",
+            add = "reg.line",
+            size = 1) +
+    facet_wrap(~ Phase, ncol=4) +
+    stat_cor(label.y = 11, 
+             label.sep = ", ",
+             size = 2) +
+    #stat_regline_equation(label.y = 1) +
+    labs(x = "", y = "PC1") +
+    theme(axis.text = element_text(size = 8)) +
+    theme_bw(base_family = "IPAexGothic") + 
+    scale_y_continuous(limits = c(0, 12),
+                       breaks = c(seq(0, 10, 2)),
+                       labels = c(seq(0, 10, 2)))
+
+pc2_size_scatterplot_small <- 
+  ggscatter(size_pcs_cv_small, 
+            x = "rim_diameter", 
+            y = "pc2",
+            add = "reg.line",
+            size = 1) +
+    facet_wrap(~ Phase, ncol=4) +
+    stat_cor(label.y = 11, 
+             label.sep = ", ",
+             size = 2) +
+    #stat_regline_equation(label.y = 1) +
+    labs(x = "", y = "PC2") +
+    theme(axis.text = element_text(size = 8)) +
+    theme_bw(base_family = "IPAexGothic") + 
+    scale_y_continuous(limits = c(0, 12),
+                       breaks = c(seq(0, 10, 2)),
+                       labels = c(seq(0, 10, 2)))
+
+pc3_size_scatterplot_small <- 
+  ggscatter(size_pcs_cv_small, 
+            x = "rim_diameter", 
+            y = "pc3",
+            add = "reg.line",
+            size = 1) +
+    facet_wrap(~ Phase, ncol=4) +
+    stat_cor(label.y = 11, 
+             label.sep = ", ",
+             size = 2) +
+    #stat_regline_equation(label.y = 1) +
+    labs(x = "", y = "PC3") +
+    theme(axis.text = element_text(size = 8)) +
+    theme_bw(base_family = "IPAexGothic") + 
+    scale_y_continuous(limits = c(0, 12),
+                       breaks = c(seq(0, 10, 2)),
+                       labels = c(seq(0, 10, 2)))
+
+ggsave(plot=pc1_size_scatterplot_small,
+       here("analysis", "figures", "pc1_size_scatterplot_small.jpg"),
+       width = 180, height = 100, dpi = 300,
+       units = "mm")
+ggsave(plot=pc2_size_scatterplot_small,
+       here("analysis", "figures", "pc2_size_scatterplot_small.jpg"),
+       width = 180, height = 100, dpi = 300,
+       units = "mm")
+ggsave(plot=pc3_size_scatterplot_small,
+       here("analysis", "figures", "pc3_size_scatterplot_small.jpg"),
+       width = 180, height = 100, dpi = 300,
+       units = "mm")
+
+#large
+pc1_size_scatterplot_large <- 
+  ggscatter(size_pcs_cv_large, 
+            x = "rim_diameter", 
+            y = "pc1",
+            add = "reg.line",
+            size = 1) +
+    facet_wrap(~ Phase, ncol=4) +
+    stat_cor(label.y = 11, 
+             label.sep = ", ",
+             size = 2) +
+    #stat_regline_equation(label.y = 1) +
+    labs(x = "", y = "PC1") +
+    theme(axis.text = element_text(size = 8)) +
+    theme_bw(base_family = "IPAexGothic") + 
+    scale_y_continuous(limits = c(0, 12),
+                       breaks = c(seq(0, 10, 2)),
+                       labels = c(seq(0, 10, 2)))
+
+pc2_size_scatterplot_large <- 
+  ggscatter(size_pcs_cv_large, 
+            x = "rim_diameter", 
+            y = "pc2",
+            add = "reg.line",
+            size = 1) +
+    facet_wrap(~ Phase, ncol=4) +
+    stat_cor(label.y = 11, 
+             label.sep = ", ",
+             size = 2) +
+    #stat_regline_equation(label.y = 1) +
+    labs(x = "", y = "PC2") +
+    theme(axis.text = element_text(size = 8)) +
+    theme_bw(base_family = "IPAexGothic") + 
+    scale_y_continuous(limits = c(0, 12),
+                       breaks = c(seq(0, 10, 2)),
+                       labels = c(seq(0, 10, 2)))
+
+pc3_size_scatterplot_large <- 
+  ggscatter(size_pcs_cv_large, 
+            x = "rim_diameter", 
+            y = "pc3",
+            add = "reg.line",
+            size = 1) +
+    facet_wrap(~ Phase, ncol=4) +
+    stat_cor(label.y = 11, 
+             label.sep = ", ",
+             size = 2) +
+    #stat_regline_equation(label.y = 1) +
+    labs(x = "", y = "PC3") +
+    theme(axis.text = element_text(size = 8)) +
+    theme_bw(base_family = "IPAexGothic") + 
+    scale_y_continuous(limits = c(0, 12),
+                       breaks = c(seq(0, 10, 2)),
+                       labels = c(seq(0, 10, 2)))
+
+
+ggsave(plot=pc1_size_scatterplot_large,
+       here("analysis", "figures", "pc1_size_scatterplot_large.jpg"),
+       width = 180, height = 100, dpi = 300,
+       units = "mm")
+ggsave(plot=pc2_size_scatterplot_large,
+       here("analysis", "figures", "pc2_size_scatterplot_large.jpg"),
+       width = 180, height = 100, dpi = 300,
+       units = "mm")
+ggsave(plot=pc3_size_scatterplot_large,
+       here("analysis", "figures", "pc3_size_scatterplot_large.jpg"),
+       width = 180, height = 100, dpi = 300,
+       units = "mm")
+
+```
+
+## 口径のヒストグラム
+```{r histogram,echo=FALSE,fig.cap="富山と京都の各段階の口径分布ヒストグラムと密度曲線（楕円フーリエ解析した資料を対象）。ｘ軸は口径、ｙ軸は密度（度数）、ビン幅は0.5。直線は小型品と中大型品の境（10.7cm）。"}
+diameter_1 <- size_pcs_cv_small
+colnames(diameter_1)[3] <- "jpgs_imported_coo_size"
+diameter_2 <- size_pcs_cv_large
+colnames(diameter_2)[3] <- "jpgs_imported_coo_size"
+
+diameter_df <- rbind(diameter_1,diameter_2)  #データフレームを結合
+diameter_df <- diameter_df[,-1] 
+diameter_df[["Phase"]] <-
+  factor(diameter_df[["Phase"]],
+         levels=c("富山1段階","京都9B段階","富山2段階","京都9C段階",
+                  "富山3段階","京都10A段階","富山4段階","京都10B段階"))
+
+#「最適なビン幅」は決まっていないので、状況に応じて設定
+library(tidyverse)
+ggplot(data=diameter_df)+
+  aes(x=rim_diameter,y=..density..)+
+  geom_histogram(binwidth = 0.5)+ #ヒストグラムを描写
+  facet_wrap(~Phase, scales="free_y", ncol=2)+
+  labs(x="Rim diameter(cm)", y="Density")+
+  theme_minimal(base_family = "IPAexGothic") #base_familyで日本語化
+```
+
+## 統計検定
+```{r Brunner-Munzel-test}
+#Brunner-Munzel検定（正規性、等分散を仮定しない検定。中央値を比較している）
+#理論的な背景はhttps://oku.edu.mie-u.ac.jp/~okumura/stat/brunner-munzel.html
+
+library(lawstat)
+T1_T2_small <-
+  brunner.munzel.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山1段階"],
+                      size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山2段階"])
+T1_T3_small <-
+  brunner.munzel.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山1段階"],
+                      size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山3段階"])
+T1_T4_small <- 
+  brunner.munzel.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山1段階"],
+                      size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山4段階"])
+T2_T3_small <- 
+  brunner.munzel.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山2段階"],
+                      size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山3段階"])
+T2_T4_small <- 
+  brunner.munzel.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山2段階"],
+                      size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山4段階"])
+T3_T4_small <- 
+  brunner.munzel.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山3段階"],
+                      size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山4段階"])
+T1_K9C_small <-
+  brunner.munzel.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山1段階"],
+                      size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都9C段階"])
+T2_K9C_small <-
+  brunner.munzel.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山2段階"],
+                      size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都9C段階"])
+T4_K10B_small <- 
+  brunner.munzel.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山4段階"],
+                      size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都10B段階"])
+K9C_K10B_small <- 
+  brunner.munzel.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都9C段階"],
+                      size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都10B段階"])
+K10A_K10B_small <-
+  brunner.munzel.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都10A段階"],
+                      size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都10B段階"])
+
+wil_small_group_vector <- c("富山1段階vs富山2段階",
+                             "富山1段階vs富山3段階",
+                             "富山1段階vs富山4段階",
+                             "富山2段階vs富山3段階",
+                             "富山2段階vs富山4段階",
+                             "富山3段階vs富山4段階",
+                             "富山1段階vs京都9C段階",
+                             "富山2段階vs京都9C段階",
+                             "富山4段階vs京都10B段階",
+                             "京都9C段階vs京都10B段階",
+                             "京都10A段階vs京都10B段階")
+
+wil_small_w_vector <- c(T1_T2_small[["parameter"]][["df"]],
+                        T1_T3_small[["parameter"]][["df"]],
+                        T1_T4_small[["parameter"]][["df"]],
+                        T2_T3_small[["parameter"]][["df"]],
+                        T2_T4_small[["parameter"]][["df"]],
+                        T3_T4_small[["parameter"]][["df"]],
+                        T1_K9C_small[["parameter"]][["df"]],
+                        T2_K9C_small[["parameter"]][["df"]],
+                        T4_K10B_small[["parameter"]][["df"]],
+                        K9C_K10B_small[["parameter"]][["df"]],
+                        K10A_K10B_small[["parameter"]][["df"]])
+
+wil_small_p_vector <- c(T1_T2_small[["p.value"]],
+                        T1_T3_small[["p.value"]],
+                        T1_T4_small[["p.value"]],
+                        T2_T3_small[["p.value"]],
+                        T2_T4_small[["p.value"]],
+                        T3_T4_small[["p.value"]],
+                        T1_K9C_small[["p.value"]],
+                        T2_K9C_small[["p.value"]],
+                        T4_K10B_small[["p.value"]],
+                        K9C_K10B_small[["p.value"]],
+                        K10A_K10B_small[["p.value"]])
+
+wil_small_df <- data.frame(Phase = wil_small_group_vector,
+                           df = wil_small_w_vector,
+                           "p-value" = wil_small_p_vector) %>%
+  mutate_if(is.numeric, round, 4)
+
+
+knitr::kable(wil_small_df, caption = "小型品の口径に対するBrunner-Munzel検定の概要")
+
+```
+
+
+```{r Welch-t-test}
+# 富山1〜4段階の口径の平均値についてt検定を行う。
+# 帰無仮説H0:x段階＝y段階を否定することで、対立仮説H1を支持する。
+# 等分散を仮定しないt検定（ウェルチのt検定、var.equal=FALSE）
+# 基本的に正規分布を仮定していますが、仮定できない場合でも高い精度を維持できると言われています。https://www.researchgate.net/publication/226351592_The_two-sample_t_test_Pre-testing_its_assumptions_does_not_pay_off
+
+options(scipen = 4) #指数表示を数値にする魔法の言葉...。
+
+tT1_T2_small <- 
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山1段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山2段階"],
+         var.equal=FALSE)
+
+tT1_T3_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山1段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山3段階"],
+         var.equal=FALSE)
+
+tT1_T4_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山1段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山4段階"],
+         var.equal=FALSE)
+
+tT2_T3_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山2段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山3段階"],
+         var.equal=FALSE)
+
+tT2_T4_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山2段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山4段階"],
+         var.equal=FALSE)
+
+tT3_T4_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山3段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山4段階"],
+         var.equal=FALSE)
+
+tT1_K9C_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山1段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都9C段階"],
+         var.equal=FALSE)
+
+tT2_K9C_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山2段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都9C段階"],
+         var.equal=FALSE)
+
+tT4_K10B_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "富山4段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都10B段階"],
+         var.equal=FALSE)
+
+tK9C_K10B_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都9C段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都10B段階"],
+         var.equal=FALSE)
+tK10A_K10B_small <-
+  t.test(size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都10A段階"],
+         size_pcs_cv_small$rim_diameter[size_pcs_cv_small$Phase == "京都10B段階"],
+         var.equal=FALSE)
+
+t_small_group_vector <- c("富山1段階vs富山2段階",
+                          "富山1段階vs富山3段階",
+                          "富山1段階vs富山4段階",
+                          "富山2段階vs富山3段階",
+                          "富山2段階vs富山4段階",
+                          "富山3段階vs富山4段階",
+                          "富山1段階vs京都9C段階",
+                          "富山2段階vs京都9C段階",
+                          "富山4段階vs京都10B段階",
+                          "京都9C段階vs京都10B段階",
+                          "京都10A段階vs京都10B段階")
+
+t_small_t_vector <- c(tT1_T2_small[["statistic"]][["t"]],
+                      tT1_T3_small[["statistic"]][["t"]],
+                      tT1_T4_small[["statistic"]][["t"]],
+                      tT2_T3_small[["statistic"]][["t"]],
+                      tT2_T4_small[["statistic"]][["t"]],
+                      tT3_T4_small[["statistic"]][["t"]],
+                      tT1_K9C_small[["statistic"]][["t"]],
+                      tT2_K9C_small[["statistic"]][["t"]],
+                      tT4_K10B_small[["statistic"]][["t"]],
+                      tK9C_K10B_small[["statistic"]][["t"]],
+                      tK10A_K10B_small[["statistic"]][["t"]])
+
+t_small_df_vector <- c(tT1_T2_small[["parameter"]][["df"]],
+                       tT1_T3_small[["parameter"]][["df"]],
+                       tT1_T4_small[["parameter"]][["df"]],
+                       tT2_T3_small[["parameter"]][["df"]],
+                       tT2_T4_small[["parameter"]][["df"]],
+                       tT3_T4_small[["parameter"]][["df"]],
+                       tT1_K9C_small[["parameter"]][["df"]],
+                       tT2_K9C_small[["parameter"]][["df"]],
+                       tT4_K10B_small[["parameter"]][["df"]],
+                       tK9C_K10B_small[["parameter"]][["df"]],
+                       tK10A_K10B_small[["parameter"]][["df"]])
+
+t_small_p_vector <- c(tT1_T2_small[["p.value"]],
+                      tT1_T3_small[["p.value"]],
+                      tT1_T4_small[["p.value"]],
+                      tT2_T3_small[["p.value"]],
+                      tT2_T4_small[["p.value"]],
+                      tT3_T4_small[["p.value"]],
+                      tT1_K9C_small[["p.value"]],
+                      tT2_K9C_small[["p.value"]],
+                      tT4_K10B_small[["p.value"]],
+                      tK9C_K10B_small[["p.value"]],
+                      tK10A_K10B_small[["p.value"]])
+
+t_small_df <- data.frame(Phase = t_small_group_vector,
+                         t = t_small_t_vector,
+                         df = t_small_df_vector,
+                         "p-value" = t_small_p_vector) %>%
+  mutate_if(is.numeric, round, 4)
+
+knitr::kable(t_small_df, caption = "富山1〜4段階の口径に対するウェルチのt検定の概要")
+```
+
+
+
+
+## 参考文献

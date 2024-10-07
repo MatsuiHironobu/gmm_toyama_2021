@@ -1450,6 +1450,8 @@ diameter_df[["Phase"]] <-
          levels=c("富山1段階","京都9B段階","富山2段階","京都9C段階",
                   "富山3段階","京都10A段階","富山4段階","京都10B段階"))
 
+saveRDS(diameter_df, here("analysis/data/diameter_df.rds"))
+
 #「最適なビン幅」は決まっていないので、状況に応じて設定
 library(tidyverse)
 ggplot(data=diameter_df)+
